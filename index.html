@@ -1080,7 +1080,7 @@ N’invente aucune donnée personnelle : utilise uniquement celles fournies.`;
   return {paras,sources:src.slice(0,10),searches};
 }
 const BR={state:'idle',err:'',note:''};
-async function runBriefing(force){
+async function runBriefing(force,autoplay=true){
   const k=dkey(today());
   if(!force&&S.briefings[k]){BR.state='ready';render();return}
   BR.state='loading';BR.err='';BR.note='';render();
@@ -1090,7 +1090,7 @@ async function runBriefing(force){
   if(!res||!res.paras.length)res={paras:localScript(d,w),sources:[],ai:false};
   if(!w)BR.note=(BR.note?BR.note+' ':'')+'Météo indisponible (pas de réseau ?).';
   res.ts=Date.now();S.briefings[k]=res;Object.keys(S.briefings).sort().slice(0,-7).forEach(x=>delete S.briefings[x]);save();
-  BR.state='ready';render();speakFrom(0);
+  BR.state='ready';if(!autoplay)BR.waitTap=true;render();if(autoplay)speakFrom(0);
 }
 /* voix */
 const TTS={playing:false,paused:false,i:-1};
@@ -1116,6 +1116,7 @@ function vBriefing(){
   if(BR.state==='loading')return h+`<div class="card bload"><div class="spin"></div><b>Je prépare ton briefing…</b><small>${getKey()?'Météo, infos du jour, ton agenda et ton ciel':'Météo, ton agenda et ton ciel'}</small></div>`;
   if(!b)return h+`<button class="bstart" data-act="brun">☀️<b>Lancer mon briefing</b><small>${getKey()?'Avec les infos du jour et l’interprétation de ton ciel':'Version simple : ajoute ta clé API dans les réglages du briefing pour les infos et l’interprétation'}</small></button>`;
   if(BR.note)h+=`<p class="note bnote">${esc(BR.note)}</p>`;
+  if(BR.waitTap&&!TTS.playing)h+=`<button class="bstart" style="padding:22px 20px;font-size:34px" data-act="btap">▶<b>Écouter mon briefing</b><small>Ton briefing est prêt, touche pour le lancer</small></button>`;
   h+=`<div class="bctl"><button id="bplay" data-act="bplay">${TTS.playing&&!TTS.paused?'⏸':'▶'}</button><button data-act="bstop">⏹</button><button data-act="breplay">↺ Relire</button><button data-act="bregen">⟳ Refaire</button></div>`;
   h+='<div class="card">'+b.paras.map((p,i)=>`<div class="bp ${TTS.i===i?'cur':''}" data-act="bfrom" data-i="${i}">${p.label?`<span class="bl">${esc(p.label)}</span>`:''}<p>${esc(p.text)}</p></div>`).join('')+'</div>';
   if(b.sources&&b.sources.length)h+=`<div class="card"><h3>Sources des infos</h3>${b.sources.map(s=>`<a class="bsrc" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}<small>${esc(s.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</small></a>`).join('')}</div>`;
@@ -1393,6 +1394,7 @@ document.addEventListener('click',ev=>{
     case 'settings':settingsSheet();break;
     case 'gobrief':U.tab='briefing';render();window.scrollTo(0,0);break;
     case 'brun':unlockTTS();runBriefing(false);break;
+    case 'btap':BR.waitTap=false;unlockTTS();speakFrom(0);render();break;
     case 'bplay':{if(TTS.playing&&!TTS.paused){try{TTS.az?AUD.pause():speechSynthesis.pause()}catch(e){}TTS.paused=true}else if(TTS.playing&&TTS.paused){try{TTS.az?AUD.play():speechSynthesis.resume()}catch(e){}TTS.paused=false}else{unlockTTS();speakFrom(0)}updCtl();break}
     case 'bstop':stopTTS();break;
     case 'breplay':unlockTTS();speakFrom(0);break;
@@ -1530,8 +1532,9 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 applyRecurring();
 setTimeout(()=>syncNotif(false),1500);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(()=>syncNotif(false),1500)});
-if(location.hash==='#briefing')U.tab='briefing';
-window.addEventListener('hashchange',()=>{if(location.hash==='#briefing'){U.tab='briefing';render();window.scrollTo(0,0)}});
+function openBriefingFromLink(){U.tab='briefing';const k=dkey(today());if(S.briefings[k])BR.waitTap=true;else setTimeout(()=>runBriefing(false,false),300);try{history.replaceState(null,'',location.pathname)}catch(e){}}
+if(location.hash==='#briefing'||/[?&]briefing\b/.test(location.search))openBriefingFromLink();
+window.addEventListener('hashchange',()=>{if(location.hash==='#briefing'){openBriefingFromLink();render();window.scrollTo(0,0)}});
 render();
 if(S.pin)openPin('unlock');
 if('serviceWorker' in navigator){try{const had=!!navigator.serviceWorker.controller;let done=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!done){done=true;location.reload()}});navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}}
