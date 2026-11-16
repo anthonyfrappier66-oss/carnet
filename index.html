@@ -719,7 +719,7 @@ const R=(type,days,mday)=>({type,days:days||[],mday:mday||1});
 const NOTIF_DEF={
   briefing:{on:1,times:['07:30'],rep:R('daily')},
   med:{on:1,times:['08:00'],rep:R('daily'),label:'Prendre mon traitement'},
-  positive:{on:1,times:['09:30','15:00'],rep:R('daily'),tone:'both'},
+  positive:{on:1,times:['09:30','15:00'],rep:R('daily'),mode:'range',count:3,from:'08:00',to:'20:00'},
   rdv:{on:1,befores:[60]},
   bday:{on:1,when:'day',times:['09:00']},
   astro:{on:0,times:['08:30'],scope:'major'},
@@ -732,7 +732,7 @@ function ensureNotif(){
   Object.keys(NOTIF_DEF).forEach(k=>{const o=S.notif[k]||{};
     if(o.time&&!o.times){o.times=[o.time];delete o.time}
     if(o.days&&!o.rep){o.rep=o.days.length===7?R('daily'):R('days',o.days);delete o.days}
-    if('count' in o){delete o.count;delete o.from;delete o.to}
+    if('count' in o&&!o.mode&&!o.times){delete o.count;delete o.from;delete o.to}
     if(o.before&&!o.befores){o.befores=[o.before];delete o.before}
     S.notif[k]=Object.assign(JSON.parse(JSON.stringify(NOTIF_DEF[k])),o)});
 }
@@ -741,27 +741,35 @@ const getN=k=>k.startsWith('c:')?S.notifCustom.find(x=>x.id===k.slice(2)):S.noti
 function repText(n){
   const r=n.rep;let s='';
   if(r){if(r.type==='daily')s='Tous les jours';else if(r.type==='weekdays')s='Du lundi au vendredi';else if(r.type==='weekend')s='Le week-end';else if(r.type==='monthly')s=`Le ${r.mday===1?'1er':r.mday} de chaque mois`;else{const d=[1,2,3,4,5,6,0].filter(x=>r.days.includes(x)),j=d.join('');s=j==='1234560'?'Tous les jours':j==='12345'?'Du lundi au vendredi':j==='60'?'Le week-end':!d.length?'Aucun jour choisi':d.length===1?`Tous les ${DPL[d[0]]}`:'Les '+d.map(x=>DSH[x]).join(' ')}}
+  if(n.mode==='range'){const c=n.count||1;return s+(s?', ':'')+`${c} fois au hasard entre ${n.from} et ${n.to}`+(n.from>=n.to?' ⚠️':'')}
   const t=[...(n.times||[])].sort();if(t.length)s+=(s?' à ':'À ')+t.join(', ').replace(/, ([^,]*)$/,' et $1');
   return s;
 }
 const nSel=(k,f,v,opts,l)=>`<label class="nf"><span>${l}</span><select data-n="${k}" data-f="${f}">${opts.map(([val,lab])=>`<option value="${val}" ${String(v)===String(val)?'selected':''}>${lab}</option>`).join('')}</select></label>`;
 function timesEd(k,n){return `<div class="nf top"><span>Heures</span><div class="times">${n.times.map((t,i)=>`<span class="tchip"><input type="time" data-n="${k}" data-ti="${i}" value="${t}">${n.times.length>1?`<button type="button" data-act="ntdel" data-n="${k}" data-i="${i}" aria-label="Retirer">×</button>`:''}</span>`).join('')}<button type="button" class="tadd" data-act="ntadd" data-n="${k}">+ heure</button></div></div>`}
+function whenEd(k,n){
+  const m=n.mode||'fixed';
+  let h=`<label class="nf"><span>Quand</span><select data-n="${k}" data-f="mode"><option value="fixed" ${m==='fixed'?'selected':''}>Heures fixes</option><option value="range" ${m==='range'?'selected':''}>Au hasard (plage)</option></select></label>`;
+  if(m==='range'){h+=`<label class="nf"><span>Combien par jour</span><select data-n="${k}" data-f="count">${[1,2,3,4,5,6,8,10,12].map(c=>`<option value="${c}" ${(n.count||1)===c?'selected':''}>${c} fois</option>`).join('')}</select></label><label class="nf"><span>Pas avant</span><input type="time" data-n="${k}" data-f="from" value="${n.from||'09:00'}"></label><label class="nf"><span>Pas après</span><input type="time" data-n="${k}" data-f="to" value="${n.to||'21:00'}"></label>${(n.from||'')>=(n.to||'')?'<p class="note" style="color:var(--accent);margin:0">L’heure de fin doit être après l’heure de début.</p>':''}`}
+  else h+=timesEd(k,n);
+  return h;
+}
 function repEd(k,n){const r=n.rep;return `<label class="nf"><span>Répétition</span><select data-n="${k}" data-f="rept">${[['daily','Tous les jours'],['weekdays','En semaine (lun.–ven.)'],['weekend','Le week-end'],['days','Certains jours…'],['monthly','Une fois par mois']].map(([v,l])=>`<option value="${v}" ${r.type===v?'selected':''}>${l}</option>`).join('')}</select></label>${r.type==='days'?`<div class="ndays">${DAYN.map(([d,l])=>`<button type="button" class="${r.days.includes(d)?'on':''}" data-act="nrday" data-n="${k}" data-d="${d}">${l}</button>`).join('')}</div>`:''}${r.type==='monthly'?`<label class="nf"><span>Quel jour</span><select data-n="${k}" data-f="mday">${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${r.mday===i+1?'selected':''}>le ${i+1}</option>`).join('')}</select></label>`:''}`}
 const NROWS=[
-  ['briefing','☀️','Briefing du matin','Le signal pour lancer ton briefing.',(k,n)=>timesEd(k,n)+repEd(k,n)],
-  ['med','💊','Rappel médicament','À heure fixe, pour ne pas oublier.',(k,n)=>`<label class="nf"><span>Message</span><input type="text" data-n="${k}" data-f="label" value="${esc(n.label)}"></label>`+timesEd(k,n)+repEd(k,n)],
-  ['positive','✨','Affirmations','Un message positif pioché au hasard dans ta liste.',(k,n)=>{const c=affPool().length;return `<div class="nf"><span>${c?`${c} affirmation${c>1?'s':''} dans la pioche`:'<b style="color:var(--accent)">Ta liste est vide</b>'}</span><button type="button" class="tadd" data-act="gotoaffs">Gérer ma liste ›</button></div>`+timesEd(k,n)+repEd(k,n)}],
+  ['briefing','☀️','Briefing du matin','Le signal pour lancer ton briefing.',(k,n)=>whenEd(k,n)+repEd(k,n)],
+  ['med','💊','Rappel médicament','À heure fixe, pour ne pas oublier.',(k,n)=>`<label class="nf"><span>Message</span><input type="text" data-n="${k}" data-f="label" value="${esc(n.label)}"></label>`+whenEd(k,n)+repEd(k,n)],
+  ['positive','✨','Affirmations','Un message positif pioché au hasard dans ta liste.',(k,n)=>{const c=affPool().length;return `<div class="nf"><span>${c?`${c} affirmation${c>1?'s':''} dans la pioche`:'<b style="color:var(--accent)">Ta liste est vide</b>'}</span><button type="button" class="tadd" data-act="gotoaffs">Gérer ma liste ›</button></div>`+whenEd(k,n)+repEd(k,n)}],
   ['rdv','◇','Rappel de RDV','Avant chaque RDV qui a une heure. Tu peux en cocher plusieurs.',(k,n)=>`<div class="ndays nb">${[[15,'15 min'],[30,'30 min'],[60,'1 h'],[120,'2 h'],[1440,'La veille']].map(([v,l])=>`<button type="button" class="${n.befores.includes(v)?'on':''}" data-act="nbefore" data-v="${v}">${l}</button>`).join('')}</div>`],
   ['bday','🎂','Anniversaires','Et tes dates à retenir.',(k,n)=>nSel(k,'when',n.when,[['day','Le jour même'],['eve','La veille'],['both','La veille et le jour même']],'Quand')+timesEd(k,n)],
   ['astro','✦','Transits','Le jour où ça se passe.',(k,n)=>nSel(k,'scope',n.scope,[['major','Les grands moments'],['all','Tous, lunes comprises']],'Lesquels')+timesEd(k,n)],
-  ['mood','🎨','Humeur du jour','Pour colorier ta case.',(k,n)=>timesEd(k,n)+repEd(k,n)],
-  ['habits','✓','Habitudes','Seulement s’il en reste à cocher.',(k,n)=>timesEd(k,n)+repEd(k,n)],
+  ['mood','🎨','Humeur du jour','Pour colorier ta case.',(k,n)=>whenEd(k,n)+repEd(k,n)],
+  ['habits','✓','Habitudes','Seulement s’il en reste à cocher.',(k,n)=>whenEd(k,n)+repEd(k,n)],
   ['budget','€','Alerte budget','Quand tu approches de ton budget du mois.',(k,n)=>nSel(k,'threshold',n.threshold,[[50,'À 50 %'],[80,'À 80 %'],[90,'À 90 %'],[100,'Quand il est dépassé']],'Prévenir')],
-  ['sunday','📅','Récap de la semaine','Ta semaine à venir : RDV, anniversaires, transits.',(k,n)=>timesEd(k,n)+repEd(k,n)]];
+  ['sunday','📅','Récap de la semaine','Ta semaine à venir : RDV, anniversaires, transits.',(k,n)=>whenEd(k,n)+repEd(k,n)]];
 function nRow(k,ic,t,d,opts){const n=getN(k);if(!n)return '';const sum=n.on&&n.times?repText(n):'';return `<div class="nrow"><div class="nhead"><span class="nic">${ic}</span><span class="ntx"><b>${esc(t)}</b>${d?`<small>${esc(d)}</small>`:''}${sum?`<em>${esc(sum)}</em>`:''}</span><label class="sw2"><input type="checkbox" data-n="${k}" data-f="on" ${n.on?'checked':''}><i></i></label></div>${n.on?`<div class="nopts">${opts(k,n)}</div>`:''}</div>`}
 function notifBody(){
   let h='<div class="nsec">Mes notifications</div>';
-  h+=S.notifCustom.map(c=>nRow('c:'+c.id,'🔔',c.title||'Notification',c.msg||'',(k,n)=>timesEd(k,n)+repEd(k,n)+`<button type="button" class="tadd" style="align-self:flex-start" data-act="editcn" data-id="${c.id}">Modifier le texte ou supprimer</button>`)).join('');
+  h+=S.notifCustom.map(c=>nRow('c:'+c.id,'🔔',c.title||'Notification',c.msg||'',(k,n)=>whenEd(k,n)+repEd(k,n)+`<button type="button" class="tadd" style="align-self:flex-start" data-act="editcn" data-id="${c.id}">Modifier le texte ou supprimer</button>`)).join('');
   if(!S.notifCustom.length)h+='<p class="note" style="margin:0 0 4px">Crée tes propres rappels : « Arroser les plantes » tous les dimanches, « Sortir les poubelles » les mardis et vendredis…</p>';
   h+='<button class="secondary" style="margin:10px 0 6px" data-act="newcn">+ Créer une notification</button>';
   return h+'<div class="nsec">Notifications de Carnet</div>'+NROWS.map(r=>nRow(...r)).join('');
@@ -1153,7 +1161,8 @@ document.addEventListener('change',ev=>{
     else if(f==='on')n.on=nt.checked?1:0;
     else if(f==='rept'){n.rep.type=nt.value;if(nt.value==='days'&&!n.rep.days.length)n.rep.days=[5]}
     else if(f==='mday')n.rep.mday=+nt.value;
-    else n[f]=f==='threshold'?+nt.value:nt.value;
+    else if(f==='mode'){n.mode=nt.value;if(nt.value==='range'){n.count=n.count||2;n.from=n.from||'09:00';n.to=n.to||'21:00'}}
+    else n[f]=(f==='threshold'||f==='count')?+nt.value:nt.value;
     save();refreshNotif();return}
   if(ev.target.id==='importFile'){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>stageImport(String(r.result));r.readAsText(f)}
   if(ev.target.name==='custom'){const f=ev.target.closest('form');f.querySelector('[name=color]').value=ev.target.value;f.querySelectorAll('.swatch').forEach(s=>s.classList.remove('on'))}
@@ -1174,7 +1183,7 @@ document.addEventListener('submit',ev=>{
     case 'affadd':{const text=g('text');if(!text)return;S.affs.push({id:uid(),text,tone:U.affTone||'humeur',on:1});commit();const i=document.getElementById('addInput');i&&i.focus();break}
     case 'affedit':{const a=S.affs.find(x=>x.id===ds.id),t=g('text');if(t)a.text=t;a.tone=g('tone')||a.tone;closeSheet();commit();break}
     case 'affbulk':{const lines=g('text').split(/\n+/).map(x=>x.replace(/^[-•*\d.)\s]+/,'').trim()).filter(Boolean);const tone=g('tone')||'humeur';lines.forEach(t=>S.affs.push({id:uid(),text:t,tone,on:1}));closeSheet();commit();toast(lines.length+' affirmation'+(lines.length>1?'s':'')+' ajoutée'+(lines.length>1?'s':'')+' ✓');break}
-    case 'cn':{const title=g('title');if(!title){toast('Donne-lui un titre');return}if(ds.id)Object.assign(S.notifCustom.find(x=>x.id===ds.id),{title,msg:g('msg')});else S.notifCustom.push({id:uid(),on:1,title,msg:g('msg'),times:['09:00'],rep:R('daily')});save();notifSheet();break}
+    case 'cn':{const title=g('title');if(!title){toast('Donne-lui un titre');return}if(ds.id)Object.assign(S.notifCustom.find(x=>x.id===ds.id),{title,msg:g('msg')});else S.notifCustom.push({id:uid(),on:1,title,msg:g('msg'),times:['09:00'],rep:R('daily'),mode:'fixed',count:2,from:'09:00',to:'21:00'});save();notifSheet();break}
     case 'rdv':{const text=g('text'),date=g('date');if(!text||!date){toast('Indique un titre et une date');return}(S.entries['d:'+date]=S.entries['d:'+date]||[]).push({id:uid(),type:g('type')||'rdv',text,time:g('time'),place:g('place'),done:false,migrated:false});closeSheet();commit();toast('Ajouté au '+fmt(parseD(date),{day:'numeric',month:'long'})+' ✓');break}
     case 'listname':{const name=g('name');if(!name)return;if(ds.id)S.lists.find(x=>x.id===ds.id).name=name;else{const l={id:uid(),name,items:[]};S.lists.push(l);U.col='list:'+l.id}closeSheet();commit();if(!ds.id){const i=document.getElementById('addInput');i&&i.focus()}break}
     case 'listadd':{const text=g('text');if(!text)return;S.lists.find(x=>x.id===ds.l).items.push({id:uid(),text,done:false});commit();const i=document.getElementById('addInput');i&&i.focus();break}
