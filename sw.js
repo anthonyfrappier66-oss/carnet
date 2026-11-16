@@ -1,4 +1,4 @@
-const CACHE = 'carnet-v6';
+const CACHE = 'carnet-v7';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './astro.js', './astronomy.min.js', './natal.js'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting()));
@@ -30,5 +30,23 @@ self.addEventListener('fetch', e => {
     const hit = await c.match(req, {ignoreSearch: true});
     const net = fetch(req).then(r => { if (r && r.ok) c.put(req, r.clone()); return r; }).catch(() => null);
     return hit || (await net) || c.match('./index.html');
+  }));
+});
+
+// Notifications envoyées par le serveur de Carnet
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: 'Carnet', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Carnet', {
+    body: d.body || '', icon: './icon-180.png', badge: './icon-180.png',
+    tag: d.tag || undefined, renotify: !!d.tag, data: { url: d.url || './' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if (c.url.startsWith(self.registration.scope)) { c.navigate(target).catch(() => {}); return c.focus(); } }
+    return self.clients.openWindow(target);
   }));
 });

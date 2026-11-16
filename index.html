@@ -446,7 +446,7 @@ const PALETTE=['#B4553A','#2F5D8A','#8DBF7A','#E2B33C','#A595C9','#E39A5F','#5D6
 const fresh=()=>({v:1,entries:{},moods:{},moodDefs:MOODS.map(o=>({...o})),habits:[],habitLog:{},expenses:[],budget:null,cats:CATS.map(o=>({...o})),bdays:[],lists:[],gifts:[],affs:[],recurring:[],recDone:{},reviews:{},theme:'auto',pin:null,natal:{date:'',time:'',place:'',lat:'',lon:''}});
 function load(){try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s)}catch(e){}return null}
 let storageOK=true;
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){storageOK=false}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){storageOK=false}if(typeof queueSync==='function')queueSync()}
 let S=Object.assign(fresh(),load()||{});
 const OLDCAT={courses:'#8DBF7A',resto:'#E39A5F',transport:'#4F8FC0',loisirs:'#A595C9',shopping:'#C24B3A',logement:'#5D6F8F',etudes:'#E2B33C',autre:'#B9AE98'};
 S.cats.forEach(c=>{if(OLDCAT[c.id]&&c.color===OLDCAT[c.id]){const n=CATS.find(x=>x.id===c.id);if(n)c.color=n.color}});
@@ -808,8 +808,7 @@ function permState(){if(!('Notification' in window))return 'none';return Notific
 function notifSheet(){
   const ps=permState();
   sheet(`<h2>Notifications</h2>
-  <div class="nstatus">${ps==='granted'?'✅ Notifications autorisées sur ce téléphone.':ps==='denied'?'⛔ Notifications refusées. Réactive-les dans Réglages iPhone › Notifications › Carnet.':`<button class="secondary" style="margin:0 0 6px" data-act="notifperm">🔔 Autoriser les notifications</button>`}
-  <p class="note">Pour chaque notification : ajoute autant d’heures que tu veux avec « + heure », et choisis la répétition. Tes choix sont enregistrés tout de suite ; l’envoi démarrera quand l’app sera installée et reliée à son serveur.</p></div>
+  ${serverBlock()}
   <div class="nbody">${notifBody()}</div>`);
 }
 function refreshNotif(){const b=document.querySelector('.sheet .nbody');if(b)b.innerHTML=notifBody()}
@@ -1180,6 +1179,82 @@ async function azSpeakFrom(i){
   if(run===azRun){TTS.playing=false;TTS.i=-1;hlPara(-1);updCtl()}
 }
 
+/* ---------- notifications : planning + envoi au serveur ---------- */
+const NSRV='carnet.nserver',NTOK='carnet.ntoken',NSYNC='carnet.nsync';
+const lsGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
+const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
+const nServer=()=>lsGet(NSRV).replace(/\/+$/,'');
+function nToken(){let t=lsGet(NTOK);if(!t){const a=crypto.getRandomValues(new Uint8Array(24));t=btoa(String.fromCharCode(...a)).replace(/[+/=]/g,'x');lsSet(NTOK,t)}return t}
+function seeded(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return()=>{h^=h<<13;h^=h>>>17;h^=h<<5;return((h>>>0)%1000003)/1000003}}
+function dayOk(rep,d){if(!rep)return true;const w=d.getDay();switch(rep.type){case 'daily':return true;case 'weekdays':return w>=1&&w<=5;case 'weekend':return w===0||w===6;case 'days':return(rep.days||[]).includes(w);case 'monthly':return d.getDate()===Math.min(rep.mday||1,dim(d));default:return true}}
+function nTimes(n,key,d){
+  if(n.mode==='range'){const r=seeded(key+'|'+dkey(d));const [fh,fm]=(n.from||'09:00').split(':').map(Number),[th,tm]=(n.to||'21:00').split(':').map(Number);const a=fh*60+fm,b=th*60+tm;if(b<=a)return [];
+    const want=Math.min(Math.max(1,n.count||1),b-a),set=new Set();let guard=0;while(set.size<want&&guard++<5000)set.add(a+Math.floor(r()*(b-a)));return [...set].sort((x,y)=>x-y).map(m=>pad(Math.floor(m/60))+':'+pad(m%60))}
+  return n.times||[];
+}
+const atTime=(d,hhmm)=>parisToUTC(dkey(d),hhmm).getTime();
+let pendingBudget=null;
+function buildSchedule(){pendingBudget=null;
+  const out=[],now=Date.now(),t0=today(),N=S.notif,add=(t,title,body,url,tag)=>{if(t>now+20000)out.push({t,title,body:body||'',url:url||'./',tag:tag||''})};
+  const pool=S.affs.filter(a=>a.on);
+  for(let i=0;i<10;i++){
+    const d=addDays(t0,i),k=dkey(d);
+    if(N.briefing.on&&dayOk(N.briefing.rep,d))nTimes(N.briefing,'brief',d).forEach(h=>add(atTime(d,h),'☀️ Ton briefing du matin',`${S.brief.name?'Bonjour '+S.brief.name+' ! ':''}Météo, infos, agenda et ciel du jour : touche pour l’écouter.`,'./#briefing','brief'));
+    if(N.med.on&&dayOk(N.med.rep,d))nTimes(N.med,'med',d).forEach(h=>add(atTime(d,h),'💊 Rappel',N.med.label||'Prendre mon traitement','./','med'));
+    if(N.positive.on&&pool.length&&dayOk(N.positive.rep,d)){const r=seeded('aff|'+k),order=pool.map((a,ix)=>[r(),ix]).sort((x,y)=>x[0]-y[0]).map(x=>pool[x[1]]);nTimes(N.positive,'aff',d).forEach((h,ix)=>add(atTime(d,h),'✨ Affirmation',order[ix%order.length].text,'./',''))}
+    if(N.mood.on&&dayOk(N.mood.rep,d)&&!(i===0&&S.moods[k]))nTimes(N.mood,'mood',d).forEach(h=>add(atTime(d,h),'🎨 Humeur du jour','Comment s’est passée ta journée ? Colorie ta case.','./','mood'));
+    if(N.habits.on&&S.habits.length&&dayOk(N.habits.rep,d)){const left=S.habits.filter(x=>!(S.habitLog[x.id]||{})[k]);if(left.length)nTimes(N.habits,'hab',d).forEach(h=>add(atTime(d,h),'✓ Habitudes',i===0?`Il te reste à cocher : ${left.map(x=>x.name).join(', ')}.`:'Pense à cocher tes habitudes du jour.','./','hab'))}
+    if(N.sunday.on&&dayOk(N.sunday.rep,d)){let n=0;const names=[];for(let j=1;j<=7;j++){itemsFor(addDays(d,j),{rdv:1,bday:1,astro:0}).forEach(it=>{n++;if(names.length<4)names.push(it.text)})}nTimes(N.sunday,'sun',d).forEach(h=>add(atTime(d,h),'📅 Ta semaine à venir',n?`${n} rendez-vous ou date${n>1?'s':''} : ${names.join(', ')}${n>4?'…':''}`:'Rien de prévu pour l’instant : une semaine à remplir !','./','week'))}
+    (S.notifCustom||[]).filter(c=>c.on&&dayOk(c.rep,d)).forEach(c=>nTimes(c,'c'+c.id,d).forEach(h=>add(atTime(d,h),'🔔 '+c.title,c.msg||'','./','')));
+    if(N.bday.on){const tt=N.bday.times&&N.bday.times.length?N.bday.times:['09:00'];
+      if(N.bday.when!=='eve')bdaysOn(d).forEach(b=>{const x=bdayText(b,d.getFullYear());tt.forEach(h=>add(atTime(d,h),'🎂 Aujourd’hui',x.text+(x.sub?' ('+x.sub+')':''),'./','bday'))});
+      if(N.bday.when!=='day'){const dn=addDays(d,1);bdaysOn(dn).forEach(b=>{const x=bdayText(b,dn.getFullYear());tt.forEach(h=>add(atTime(d,h),'🎂 Demain',x.text+(x.sub?' ('+x.sub+')':''),'./','bday'))})}}
+    if(N.astro.on){const ev=(AST[k]||[]).filter(e=>N.astro.scope==='all'||e.m);if(ev.length)(N.astro.times&&N.astro.times.length?N.astro.times:['08:30']).forEach(h=>add(atTime(d,h),'✦ Ciel du jour',ev.map(e=>e.x).join(' · '),'./','astro'))}
+    if(N.rdv.on)(S.entries['d:'+k]||[]).filter(e=>TIMED(e.type)&&e.time&&!e.migrated&&!e.done).forEach(e=>(N.rdv.befores||[]).forEach(m=>{const t=atTime(d,e.time)-m*60000;add(t,m>=1440?'📅 Demain':'⏰ Dans '+(m>=60?(m/60)+' h':m+' min'),`${e.text} à ${e.time.replace(':',' h ')}${e.place?' — '+e.place:''}`,'./','rdv')}));
+  }
+  if(N.budget.on&&S.budget){const spent=monthExp(som(t0)).reduce((s,e)=>s+e.amount,0),pc=spent/S.budget*100,m=ym(t0);S.budgetNotified=S.budgetNotified||{};
+    if(pc>=N.budget.threshold&&S.budgetNotified[m]!==N.budget.threshold){add(now+60000,'€ Budget',pc>=100?`Budget du mois dépassé : ${eur(spent)} dépensés sur ${eur(S.budget)}.`:`Tu as utilisé ${Math.round(pc)} % de ton budget (${eur(S.budget-spent)} restants).`,'./','budget');pendingBudget=[m,N.budget.threshold]}}
+  return out.sort((a,b)=>a.t-b.t).slice(0,1400);
+}
+let syncTimer=null;
+async function syncNotif(force){
+  const srv=nServer();if(!srv||!lsGet('carnet.nreg'))return null;
+  const items=buildSchedule(),sig=JSON.stringify(items.map(i=>[i.t,i.title,i.body])),h=String(sig.length)+':'+sig.split('').reduce((a,c)=>(a*31+c.charCodeAt(0))|0,0);
+  let st={};try{st=JSON.parse(lsGet(NSYNC)||'{}')}catch(e){}
+  if(!force&&st.h===h&&Date.now()-(st.at||0)<6*3600e3)return st;
+  try{const r=await fetch(srv+'/schedule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:nToken(),items})});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
+    st={h,at:Date.now(),count:j.count};lsSet(NSYNC,JSON.stringify(st));if(pendingBudget){S.budgetNotified=S.budgetNotified||{};S.budgetNotified[pendingBudget[0]]=pendingBudget[1];try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}return st}
+  catch(e){return {error:String(e.message||e)}}
+}
+window.carnetPlanning=()=>buildSchedule();
+function queueSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncNotif(false),4000)}
+async function activatePush(){
+  const out=m=>{const el=document.getElementById('nsrvRes');if(el)el.innerHTML=m};
+  const srv=nServer();if(!srv){out('<b style="color:var(--accent)">Indique d’abord l’adresse du serveur.</b>');return}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){out('<b style="color:var(--accent)">Pas disponible ici : ouvre Carnet depuis son icône sur l’écran d’accueil.</b>');return}
+  try{
+    const perm=await Notification.requestPermission();if(perm!=='granted'){out('<b style="color:var(--accent)">Notifications refusées. Réactive-les dans Réglages iPhone › Notifications › Carnet.</b>');return}
+    out('Connexion au serveur…');
+    const v=await (await fetch(srv+'/vapid')).json();
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(sub){const cur=sub.options&&sub.options.applicationServerKey?btoa(String.fromCharCode(...new Uint8Array(sub.options.applicationServerKey))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''):'';if(cur&&cur!==v.publicKey){await sub.unsubscribe();sub=null}}
+    if(!sub){const raw=Uint8Array.from(atob(v.publicKey.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-v.publicKey.length%4)%4)),c=>c.charCodeAt(0));sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:raw})}
+    const r=await fetch(srv+'/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:nToken(),subscription:sub.toJSON()})});const j=await r.json();
+    if(!r.ok)throw new Error(j.error||('erreur '+r.status));
+    lsSet('carnet.nreg','1');const st=await syncNotif(true);
+    out(`<b style="color:#4F9A5C">✓ Notifications activées.</b> ${st&&st.count!=null?st.count+' notifications programmées pour les 10 prochains jours.':''}`);
+  }catch(e){out('<b style="color:var(--accent)">'+esc(String(e.message||e))+'</b>')}
+}
+async function testPush(){const el=document.getElementById('nsrvRes');try{const r=await fetch(nServer()+'/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:nToken()})});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);if(el)el.innerHTML='Test envoyé : la notification devrait arriver dans quelques secondes.'}catch(e){if(el)el.innerHTML='<b style="color:var(--accent)">'+esc(String(e.message||e))+'</b>'}}
+function serverBlock(){
+  let st={};try{st=JSON.parse(lsGet(NSYNC)||'{}')}catch(e){}
+  const on=!!lsGet('carnet.nreg');
+  return `<div class="card" style="margin:0 0 10px"><h3>Serveur de notifications</h3><input type="text" id="nsrvUrl" value="${esc(nServer())}" placeholder="https://carnet-notif….workers.dev" autocapitalize="off" spellcheck="false" style="width:100%;border:1px solid var(--line);background:var(--field);border-radius:12px;padding:10px 12px;font-size:15px">
+  <div class="row2" style="margin-top:8px"><button class="primary" style="margin:0" data-act="nactivate">${on?'Réactiver':'Activer sur ce téléphone'}</button>${on?'<button class="secondary" style="margin:0" data-act="ntest">Envoyer un test</button>':''}</div>
+  <p class="note" id="nsrvRes">${on?(st.at?`Dernière synchro à ${new Date(st.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} : ${st.count} notifications programmées.`:'Activé.'):'Carnet envoie au serveur le planning des 10 prochains jours, à chaque ouverture. Ouvre l’app au moins une fois tous les 10 jours.'}</p></div>`;
+}
+
 /* ---------- render ---------- */
 const app=document.getElementById('app'),bar=document.getElementById('tabbar');
 const TABS=[['journal','Journal',ICON.journal],['planning','Planning',ICON.cal],['track','Suivi',ICON.mood],['money','Dépenses',ICON.money],['col','Collections',ICON.col]];
@@ -1360,6 +1435,8 @@ document.addEventListener('click',ev=>{
     case 'closesheet':closeSheet();break;
     case 'gotoaffs':closeSheet();U.tab='col';U.col='affs';render();window.scrollTo(0,0);break;
     case 'notifs':notifSheet();break;
+    case 'nactivate':{const u=(document.getElementById('nsrvUrl')||{}).value||'';lsSet(NSRV,u.trim().replace(/\/+$/,''));activatePush();break}
+    case 'ntest':testPush();break;
     case 'notifperm':askNotif();break;
     case 'ntadd':{const n=getN(ds.n);const last=[...n.times].sort().pop()||'08:00';const hh=Math.min(23,+last.slice(0,2)+2);n.times.push(pad(hh)+last.slice(2));save();refreshNotif();break}
     case 'ntdel':{const n=getN(ds.n);n.times.splice(+ds.i,1);save();refreshNotif();break}
@@ -1451,6 +1528,8 @@ let lastDay=dkey(today());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&dkey(today())!==lastDay){lastDay=dkey(today());U.cur=today();U.hm=som(today());U.em=som(today());U.my=today().getFullYear();applyRecurring();render()}});
 
 applyRecurring();
+setTimeout(()=>syncNotif(false),1500);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(()=>syncNotif(false),1500)});
 if(location.hash==='#briefing')U.tab='briefing';
 window.addEventListener('hashchange',()=>{if(location.hash==='#briefing'){U.tab='briefing';render();window.scrollTo(0,0)}});
 render();
