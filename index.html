@@ -750,7 +750,7 @@ function timesEd(k,n){return `<div class="nf top"><span>Heures</span><div class=
 function whenEd(k,n){
   const m=n.mode||'fixed';
   let h=`<label class="nf"><span>Quand</span><select data-n="${k}" data-f="mode"><option value="fixed" ${m==='fixed'?'selected':''}>Heures fixes</option><option value="range" ${m==='range'?'selected':''}>Au hasard (plage)</option></select></label>`;
-  if(m==='range'){h+=`<label class="nf"><span>Combien par jour</span><select data-n="${k}" data-f="count">${[1,2,3,4,5,6,8,10,12].map(c=>`<option value="${c}" ${(n.count||1)===c?'selected':''}>${c} fois</option>`).join('')}</select></label><label class="nf"><span>Pas avant</span><input type="time" data-n="${k}" data-f="from" value="${n.from||'09:00'}"></label><label class="nf"><span>Pas après</span><input type="time" data-n="${k}" data-f="to" value="${n.to||'21:00'}"></label>${(n.from||'')>=(n.to||'')?'<p class="note" style="color:var(--accent);margin:0">L’heure de fin doit être après l’heure de début.</p>':''}`}
+  if(m==='range'){h+=`<label class="nf"><span>Combien par jour</span><input type="number" inputmode="numeric" min="1" max="60" style="width:80px;text-align:center" data-n="${k}" data-f="count" value="${n.count||1}"></label><label class="nf"><span>Pas avant</span><input type="time" data-n="${k}" data-f="from" value="${n.from||'09:00'}"></label><label class="nf"><span>Pas après</span><input type="time" data-n="${k}" data-f="to" value="${n.to||'21:00'}"></label>${(n.from||'')>=(n.to||'')?'<p class="note" style="color:var(--accent);margin:0">L’heure de fin doit être après l’heure de début.</p>':''}`}
   else h+=timesEd(k,n);
   return h;
 }
@@ -1162,6 +1162,7 @@ document.addEventListener('change',ev=>{
     else if(f==='rept'){n.rep.type=nt.value;if(nt.value==='days'&&!n.rep.days.length)n.rep.days=[5]}
     else if(f==='mday')n.rep.mday=+nt.value;
     else if(f==='mode'){n.mode=nt.value;if(nt.value==='range'){n.count=n.count||2;n.from=n.from||'09:00';n.to=n.to||'21:00'}}
+    else if(f==='count')n.count=Math.max(1,Math.min(60,Math.round(+nt.value)||1));
     else n[f]=(f==='threshold'||f==='count')?+nt.value:nt.value;
     save();refreshNotif();return}
   if(ev.target.id==='importFile'){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>stageImport(String(r.result));r.readAsText(f)}
