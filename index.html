@@ -1243,7 +1243,7 @@ async function activatePush(){
     const r=await fetch(srv+'/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:nToken(),subscription:sub.toJSON()})});const j=await r.json();
     if(!r.ok)throw new Error(j.error||('erreur '+r.status));
     lsSet('carnet.nreg','1');const st=await syncNotif(true);
-    out(`<b style="color:#4F9A5C">✓ Notifications activées.</b> ${st&&st.count!=null?st.count+' notifications programmées pour les 10 prochains jours.':''}`);
+    notifSheet();out(`<b style="color:#4F9A5C">✓ Notifications activées.</b> ${st&&st.count!=null?st.count+' notifications programmées pour les 10 prochains jours.':''} Touche « Envoyer un test » pour vérifier.`);
   }catch(e){out('<b style="color:var(--accent)">'+esc(String(e.message||e))+'</b>')}
 }
 async function testPush(){const el=document.getElementById('nsrvRes');try{const r=await fetch(nServer()+'/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:nToken()})});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);if(el)el.innerHTML='Test envoyé : la notification devrait arriver dans quelques secondes.'}catch(e){if(el)el.innerHTML='<b style="color:var(--accent)">'+esc(String(e.message||e))+'</b>'}}
