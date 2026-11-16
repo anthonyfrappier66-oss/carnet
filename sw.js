@@ -1,4 +1,4 @@
-const CACHE = 'carnet-v4';
+const CACHE = 'carnet-v5';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './astro.js', './astronomy.min.js', './natal.js'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting()));
@@ -6,12 +6,28 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
-// Hors ligne d'abord : on sert la copie en cache tout de suite, et on la met à jour en arrière-plan quand il y a du réseau.
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+  if (isPage) {
+    // Page : d'abord le réseau (toujours la dernière version), sinon la copie hors ligne.
+    e.respondWith((async () => {
+      const c = await caches.open(CACHE);
+      try {
+        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000);
+        const r = await fetch(req, {cache: 'no-cache', signal: ctrl.signal}); clearTimeout(t);
+        if (r && r.ok) { c.put('./index.html', r.clone()); return r; }
+      } catch (err) {}
+      return (await c.match('./index.html')) || (await c.match('./'));
+    })());
+    return;
+  }
+  // Autres fichiers : la copie en cache tout de suite, mise à jour en arrière-plan.
   e.respondWith(caches.open(CACHE).then(async c => {
-    const hit = await c.match(e.request, {ignoreSearch: true});
-    const net = fetch(e.request).then(r => { if (r && r.ok) c.put(e.request, r.clone()); return r; }).catch(() => null);
+    const hit = await c.match(req, {ignoreSearch: true});
+    const net = fetch(req).then(r => { if (r && r.ok) c.put(req, r.clone()); return r; }).catch(() => null);
     return hit || (await net) || c.match('./index.html');
   }));
 });
