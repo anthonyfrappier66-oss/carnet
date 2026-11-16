@@ -247,8 +247,13 @@ select{font-family:inherit;font-size:16px;color:var(--ink);width:100%;border:1px
 
 /* sheet */
 .backdrop{position:fixed;inset:0;background:rgba(20,24,30,.38);z-index:30;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s ease-out}
-.sheet{background:var(--card);width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;animation:up .22s ease-out}
-.sheet .grip{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
+.sheet{background:var(--card);width:100%;max-width:640px;border-radius:22px 22px 0 0;max-height:calc(100vh - env(safe-area-inset-top) - 30px);max-height:calc(100dvh - env(safe-area-inset-top) - 30px);display:flex;flex-direction:column;overflow:hidden;animation:up .22s ease-out}
+.shead{flex:none;position:relative;min-height:50px;padding:10px 18px 6px;touch-action:none;border-bottom:1px solid transparent}
+.sx{position:absolute;right:12px;top:10px;width:32px;height:32px;border-radius:50%;border:0;background:var(--wash2);color:var(--muted);font-size:15px;line-height:1;display:grid;place-items:center}
+.sbody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 18px calc(18px + env(safe-area-inset-bottom))}
+.sbody h2{padding-right:36px}
+body.locked{position:fixed;left:0;right:0;overflow:hidden}
+.sheet .grip{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 8px}
 .sheet h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:0 0 14px}
 .sheet label.f{display:block;font:700 11.5px var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 6px}
 .sheet input[type=text],.sheet input[type=number],.sheet input[type=date],.sheet input[type=time],.sheet textarea{width:100%;border:1px solid var(--line);background:var(--field);border-radius:12px;padding:11px 12px;outline:none}
@@ -944,8 +949,23 @@ function commit(){save();render()}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),1800)}
 
 /* ---------- sheets ---------- */
-function sheet(html){closeSheet();const b=document.createElement('div');b.className='backdrop';b.innerHTML=`<div class="sheet" role="dialog"><div class="grip"></div>${html}</div>`;b.addEventListener('click',e=>{if(e.target===b)closeSheet()});document.body.appendChild(b);return b.firstElementChild}
-function closeSheet(){document.querySelectorAll('.backdrop').forEach(n=>n.remove())}
+let lockY=0;
+function lockBody(){if(document.body.classList.contains('locked'))return;lockY=window.scrollY;document.body.style.top=-lockY+'px';document.body.classList.add('locked')}
+function unlockBody(){if(!document.body.classList.contains('locked'))return;document.body.classList.remove('locked');document.body.style.top='';window.scrollTo(0,lockY)}
+function sheet(html){
+  document.querySelectorAll('.backdrop').forEach(n=>n.remove());
+  const b=document.createElement('div');b.className='backdrop';
+  b.innerHTML=`<div class="sheet" role="dialog"><div class="shead"><div class="grip"></div><button class="sx" data-act="closesheet" aria-label="Fermer">✕</button></div><div class="sbody">${html}</div></div>`;
+  b.addEventListener('click',e=>{if(e.target===b)closeSheet()});
+  document.body.appendChild(b);lockBody();
+  const sh=b.firstElementChild,hd=sh.firstElementChild;let y0=null,dy=0;
+  hd.addEventListener('touchstart',e=>{y0=e.touches[0].clientY;dy=0;sh.style.transition='none'},{passive:true});
+  hd.addEventListener('touchmove',e=>{if(y0==null)return;dy=Math.max(0,e.touches[0].clientY-y0);sh.style.transform=`translateY(${dy}px)`},{passive:true});
+  hd.addEventListener('touchend',()=>{sh.style.transition='transform .2s';if(dy>80)closeSheet();else sh.style.transform='';y0=null});
+  return sh.querySelector('.sbody');
+}
+function closeSheet(){const had=document.querySelector('.backdrop');document.querySelectorAll('.backdrop').forEach(n=>n.remove());if(had)unlockBody()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 function findEntry(key,id){return (S.entries[key]||[]).find(e=>e.id===id)}
 function nextKey(key){
   const [p,v]=[key.slice(0,1),key.slice(2)];
@@ -1174,7 +1194,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 applyRecurring();
 render();
 if(S.pin)openPin('unlock');
-if('serviceWorker' in navigator){try{navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}}
+if('serviceWorker' in navigator){try{const had=!!navigator.serviceWorker.controller;let done=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!done){done=true;location.reload()}});navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}}
 })();
 </script>
 </body>
