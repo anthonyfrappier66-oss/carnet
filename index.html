@@ -326,6 +326,31 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .sw2.sm input:checked+i:after{transform:translateX(16px)}
 .opt.sugg{font-family:var(--serif);font-size:16px;line-height:1.35}
 .opt.sugg.added{color:var(--muted);background:rgba(76,154,91,.08)}
+.bcard{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;color:inherit;background:linear-gradient(135deg,rgba(237,161,0,.14),rgba(180,85,58,.10)),var(--card)}
+.bcard>span:first-child{font-size:26px}
+.bcard>span:nth-child(2){flex:1}
+.bcard b{font-family:var(--serif);font-size:19px;font-weight:600}
+.bcard small{display:block;color:var(--muted);font-size:13px}
+.bcard svg{width:18px;height:18px;color:var(--muted)}
+.bstart{width:100%;border:0;border-radius:22px;padding:34px 20px;background:linear-gradient(135deg,#E9A23B,#B4553A);color:#fff;font-size:44px;display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0 14px;box-shadow:0 8px 24px rgba(180,85,58,.25)}
+.bstart b{font-family:var(--serif);font-size:24px;font-weight:600}
+.bstart small{font-size:13.5px;opacity:.92;line-height:1.4;max-width:280px}
+.bload{display:flex;flex-direction:column;align-items:center;gap:8px;padding:34px 16px;text-align:center}
+.bload b{font-family:var(--serif);font-size:19px;font-weight:600}
+.bload small{color:var(--muted)}
+.spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:sp 0.9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.bctl{display:flex;gap:8px;margin:0 -16px 12px;padding:8px 16px;position:sticky;top:env(safe-area-inset-top);z-index:5;background:var(--paper)}
+.bctl button{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:10px 12px;font:600 14px var(--sans);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.bctl #bplay{width:52px;background:var(--accent);border-color:var(--accent);color:#fff;font-size:17px}
+.bp{padding:10px 8px;margin:0 -8px;border-radius:12px;transition:background .2s;cursor:pointer}
+.bp.cur{background:rgba(237,161,0,.14)}
+.bp .bl{display:block;font:700 11px var(--sans);text-transform:uppercase;letter-spacing:.09em;color:var(--accent);margin-bottom:3px}
+.bp p{margin:0;font-family:var(--serif);font-size:17px;line-height:1.55}
+.bnote{color:var(--accent);margin:0 0 10px}
+.bsrc{display:block;padding:8px 0;border-bottom:1px dashed var(--line);color:var(--blue);text-decoration:none;font-size:14.5px;line-height:1.35}
+.bsrc:last-child{border-bottom:0}
+.bsrc small{display:block;color:var(--muted);font-size:12px}
 .toast{white-space:nowrap;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 14px);background:var(--ink);color:var(--onink);padding:9px 16px;border-radius:20px;font-size:14px;z-index:40;animation:fade .2s}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes up{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
@@ -509,6 +534,7 @@ function vJournal(){
     const sky=itemsFor(d,{bday:1,astro:1});
     personalTransits(d).filter(x=>x.orb<=.5).forEach(x=>sky.push({c:'astro',ic:'◎',text:`${trName(x.t)} ${x.name} ${POSS[x.n.id]}`,sub:x.kw,act:'opencol',ac:'natal'}));
     const yk=dkey(addDays(today(),-1));
+    if(same(d,today()))h+=`<button class="card bcard" data-act="gobrief"><span>☀️</span><span><b>Mon briefing</b><small>${S.briefings[dkey(today())]?'Déjà prêt : touche pour le réécouter':'Météo, infos, agenda, ciel du jour'}</small></span>${ICON.right}</button>`;
     if(same(d,today())&&!reviewOf(yk))h+=`<button class="card prompt" data-act="review" data-date="${yk}"><span>✍️</span><span><b>Bilan d’hier</b><small>3 choses positives, 3 négatives</small></span>${ICON.right}</button>`;
     if(sky.length)h+=`<div class="card"><h3>À retenir</h3>${sky.map(pitem).join('')}</div>`;
     const cur=S.moods[k];
@@ -946,11 +972,161 @@ function vNatal(){
 }
 function natSheet(){const n=S.natal||{};sheet(`<h2>Naissance</h2><form data-form="natal"><label class="f">Date</label><input type="date" name="date" value="${esc(n.date||'')}"><label class="f">Heure (heure de France)</label><input type="time" name="time" value="${esc(n.time||'')}"><label class="f">Lieu</label><input type="text" name="place" value="${esc(n.place||'')}"><div class="grid2"><div><label class="f">Latitude</label><input type="text" inputmode="decimal" name="lat" value="${n.lat??''}"></div><div><label class="f">Longitude</label><input type="text" inputmode="decimal" name="lon" value="${n.lon??''}"></div></div><p class="note">Coordonnées en degrés décimaux (est positif). Exemple, Paris : 48.857 / 2.352.</p><div class="row2"><button type="submit" class="primary">Enregistrer</button></div></form>`)}
 
+/* ---------- briefing du matin ---------- */
+const BRIEF_DEF={name:'',city:'Bordeaux',lat:44.84,lon:-0.58,model:'claude-haiku-5-5',domains:['lemonde.fr','francetvinfo.fr','france24.com','rfi.fr','legrandcontinent.eu'],themes:'géopolitique, diplomatie, défense, Europe',voice:'',rate:1,length:'normal'};
+const SOURCES=[['lemonde.fr','Le Monde'],['francetvinfo.fr','franceinfo'],['france24.com','France 24'],['rfi.fr','RFI'],['legrandcontinent.eu','Le Grand Continent'],['courrierinternational.com','Courrier international'],['lefigaro.fr','Le Figaro'],['liberation.fr','Libération'],['lesechos.fr','Les Échos'],['20minutes.fr','20 Minutes']];
+function ensureBrief(){S.brief=Object.assign(JSON.parse(JSON.stringify(BRIEF_DEF)),S.brief||{});S.briefings=S.briefings||{}}
+ensureBrief();
+const KEYK='carnet.apikey';
+const getKey=()=>{try{return localStorage.getItem(KEYK)||''}catch(e){return ''}};
+const setKey=v=>{try{v?localStorage.setItem(KEYK,v):localStorage.removeItem(KEYK)}catch(e){}};
+const WMO={0:'ciel dégagé',1:'plutôt dégagé',2:'partiellement nuageux',3:'ciel couvert',45:'brouillard',48:'brouillard givrant',51:'bruine légère',53:'bruine',55:'bruine dense',56:'bruine verglaçante',57:'bruine verglaçante',61:'pluie faible',63:'pluie',65:'forte pluie',66:'pluie verglaçante',67:'pluie verglaçante',71:'neige faible',73:'neige',75:'forte neige',77:'grains de neige',80:'averses',81:'averses',82:'fortes averses',85:'averses de neige',86:'fortes averses de neige',95:'orages',96:'orages avec grêle',99:'orages avec grêle'};
+async function getWeather(){
+  const b=S.brief;const url=`https://api.open-meteo.com/v1/forecast?latitude=${b.lat}&longitude=${b.lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Europe%2FParis&forecast_days=1`;
+  const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),7000);
+  try{const r=await fetch(url,{signal:ctrl.signal});clearTimeout(t);if(!r.ok)return null;const j=await r.json();
+    return {city:b.city,now:Math.round(j.current.temperature_2m),min:Math.round(j.daily.temperature_2m_min[0]),max:Math.round(j.daily.temperature_2m_max[0]),rain:j.daily.precipitation_probability_max[0],sky:WMO[j.daily.weather_code[0]]||'temps variable'}}
+  catch(e){return null}
+}
+function briefingData(){
+  const t=today(),k=dkey(t),ent=S.entries['d:'+k]||[],open=e=>!e.done&&!e.migrated;
+  const tasks=ent.filter(e=>e.type==='task'&&open(e)).map(e=>e.text+(e.sub&&e.sub.length?` (${e.sub.filter(x=>!x.done).map(x=>x.text).join(', ')})`:''));
+  const rdv=ent.filter(e=>TIMED(e.type)&&!e.migrated).sort((a,b)=>(a.time||'99').localeCompare(b.time||'99')).map(e=>({heure:e.time||'',quoi:e.text,lieu:e.place||'',type:e.type==='rdv'?'RDV':'événement'}));
+  const m=monday(t),week=[];
+  for(let i=0;i<7;i++){const x=addDays(m,i);if(x>=t)break;(S.entries['d:'+dkey(x)]||[]).filter(e=>e.type==='task'&&open(e)).forEach(e=>week.push(e.text+' (prévu '+fmt(x,{weekday:'long'})+')'))}
+  (S.entries[wkey(t)]||[]).filter(e=>e.type==='task'&&open(e)).forEach(e=>week.push(e.text));
+  const later=[];for(let i=1;i<=3;i++){const x=addDays(t,i);(S.entries['d:'+dkey(x)]||[]).filter(e=>TIMED(e.type)&&!e.migrated).forEach(e=>later.push(`${fmt(x,{weekday:'long'})}${e.time?' '+e.time:''} : ${e.text}`))}
+  const exp=monthExp(som(t)),spent=exp.reduce((s,e)=>s+e.amount,0);
+  const bday=bdaysOn(t).map(b=>bdayText(b,t.getFullYear())),bdayTomorrow=bdaysOn(addDays(t,1)).map(b=>bdayText(b,t.getFullYear()+(addDays(t,1).getFullYear()-t.getFullYear())));
+  const sky=(AST[k]||[]).map(e=>e.x);
+  const nat=natalChart();const tr=personalTransits(t).slice(0,5).map(x=>`${trName(x.t)}${x.t.retro?' rétrograde':''} en ${x.name} avec ${POSS[x.n.id].replace(/^ton |^ta /,'son ').replace('son Lune','sa Lune').replace('son Vénus','sa Vénus')} (orbe ${x.orb.toFixed(1)}°)`);
+  const theme=nat?nat.filter(p=>['Sun','Moon','Asc','Mercury','Venus','Mars','MC'].includes(p.id)).map(p=>{const f=NAT.fmtPos(p.lon);return `${p.name} ${f.deg}° ${f.sign}`}).join(', '):null;
+  const yk=dkey(addDays(t,-1));const affs=S.affs.filter(a=>a.on);
+  const d={date:cap(fmt(t,{weekday:'long',day:'numeric',month:'long',year:'numeric'})),prenom:S.brief.name||null,taches_du_jour:tasks,rdv_du_jour:rdv,a_faire_cette_semaine_pas_encore_fait:week,prochains_jours:later,
+    rappel_traitement:S.notif.med.on?S.notif.med.label:null,
+    budget:S.budget?{budget_mensuel:S.budget,depense:Math.round(spent*100)/100,reste:Math.round((S.budget-spent)*100)/100}:{depense_ce_mois:Math.round(spent*100)/100},
+    anniversaires_aujourdhui:bday.map(b=>b.text+(b.sub?' ('+b.sub+')':'')),anniversaires_demain:bdayTomorrow.map(b=>b.text),
+    ciel_du_jour:sky,transits_sur_son_theme:tr,theme_natal:theme,
+    bilan_hier_fait:!!reviewOf(yk),affirmation:affs.length?affs[Math.floor(Math.random()*affs.length)].text:null};
+  if(t.getDay()===0){const nx=[];for(let i=1;i<=7;i++){const x=addDays(t,i);itemsFor(x,ALLF,true).forEach(it=>nx.push(`${fmt(x,{weekday:'long',day:'numeric'})} : ${it.text}`))}d.recap_semaine_prochaine=nx}
+  return d;
+}
+function localScript(d,w){
+  const P=[],add=(l,x)=>{if(x)P.push({label:l,text:x})};
+  add('Bonjour',`Bonjour${d.prenom?' '+d.prenom:''} ! Nous sommes le ${d.date}.`);
+  if(w)add('Météo',`À ${w.city}, il fait ${w.now} degrés, ${w.sky}. Aujourd’hui, entre ${w.min} et ${w.max} degrés${w.rain!=null?`, avec ${w.rain} % de risque de pluie`:''}.`);
+  if(d.rdv_du_jour.length)add('Rendez-vous',`Côté rendez-vous : `+d.rdv_du_jour.map(r=>`${r.heure?'à '+r.heure.replace(':',' h ')+', ':''}${r.quoi}${r.lieu?', '+r.lieu:''}`).join(' ; ')+'.');
+  add('À faire',d.taches_du_jour.length?`Aujourd’hui, tu as ${d.taches_du_jour.length} chose${d.taches_du_jour.length>1?'s':''} à faire : ${d.taches_du_jour.join(', ')}.`:`Rien de prévu dans ta liste du jour.`);
+  if(d.a_faire_cette_semaine_pas_encore_fait.length)add('Cette semaine',`Il te reste aussi pour cette semaine : ${d.a_faire_cette_semaine_pas_encore_fait.join(', ')}.`);
+  if(d.rappel_traitement)add('Rappel',`N’oublie pas : ${d.rappel_traitement}.`);
+  if(d.budget.reste!=null)add('Budget',d.budget.reste>=0?`Il te reste ${eur(d.budget.reste)} à dépenser ce mois-ci.`:`Attention, tu as dépassé ton budget du mois de ${eur(-d.budget.reste)}.`);
+  if(d.anniversaires_aujourdhui.length)add('Anniversaires',`Aujourd’hui : ${d.anniversaires_aujourdhui.join(', ')}.`);
+  if(d.anniversaires_demain.length)add('Anniversaires',`Demain : ${d.anniversaires_demain.join(', ')}.`);
+  if(d.ciel_du_jour.length||d.transits_sur_son_theme.length)add('Ciel du jour',[d.ciel_du_jour.join('. '),d.transits_sur_son_theme.length?'Sur ton thème : '+d.transits_sur_son_theme.map(x=>x.replace(/ \(orbe.*\)/,'').replace('son ','ton ').replace('sa ','ta ')).join(', ')+'.':''].filter(Boolean).join(' '));
+  if(d.recap_semaine_prochaine&&d.recap_semaine_prochaine.length)add('Semaine prochaine',`La semaine prochaine : ${d.recap_semaine_prochaine.join(' ; ')}.`);
+  if(d.affirmation)add('Affirmation',d.affirmation);
+  if(!d.bilan_hier_fait)add('Bilan',`Pour finir, prends une minute pour le bilan d’hier : trois choses positives, trois choses négatives.`);
+  return P;
+}
+function apiErr(j,st){const m=(j&&j.error&&j.error.message)||'';if(st===401)return 'Clé API invalide ou expirée.';if(/credit balance/i.test(m))return 'Plus de crédit sur ton compte API : recharge-le dans la console Claude.';if(st===429)return 'Trop de demandes d’un coup, réessaie dans une minute.';if(st===529||st===503)return 'Le service est surchargé, réessaie dans un instant.';return m||('Erreur '+st)}
+async function claudeCall(body){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':getKey(),'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
+  let j=null;try{j=await r.json()}catch(e){}
+  if(!r.ok){const e=new Error(apiErr(j,r.status));e.status=r.status;e.raw=(j&&j.error&&j.error.message)||'';throw e}
+  return j;
+}
+async function aiScript(d,w){
+  const b=S.brief,long=b.length==='court'?'250 à 320 mots':'400 à 520 mots';
+  const system=`Tu es la voix du briefing matinal personnel de ${b.name||'l’utilisateur'}. Ton texte sera lu à voix haute par la synthèse vocale de son iPhone : écris pour l’oral, en français, en le tutoyant, phrases courtes, ton chaleureux et dynamique. Aucun markdown, aucune liste à puces, aucun émoji, aucune URL, aucun crochet sauf les étiquettes de section. Écris les heures à l’oral (« 14 h 30 ») et les montants en toutes lettres simples (« 37 euros »).
+Structure : des paragraphes séparés par une ligne vide, chacun commençant par une étiquette entre crochets parmi : [Bonjour], [Météo], [Infos], [Rendez-vous], [À faire], [Cette semaine], [Rappel], [Budget], [Anniversaires], [Ciel du jour], [Semaine prochaine], [Affirmation], [Bilan]. N’utilise que les sections qui ont du contenu, dans cet ordre. Longueur totale : ${long}.
+[Infos] : utilise l’outil de recherche web pour trouver les 4 ou 5 actualités les plus importantes du jour (France et monde), en privilégiant ces thèmes : ${b.themes||'actualité générale'}. Pour chacune, une ou deux phrases avec tes propres mots, sans citation. Ne lis pas les articles réservés aux abonnés. Si la recherche échoue, dis-le en une phrase.
+[Ciel du jour] : résume les événements astrologiques du jour, puis donne une interprétation courte (3 ou 4 phrases) des transits sur son thème natal : concrète, bienveillante, jamais fataliste, présentée comme une tendance et non comme une prédiction.
+[Rappel] : si un rappel de traitement est fourni, rappelle-le clairement.
+[Affirmation] : lis l’affirmation telle quelle.
+[Bilan] : si bilan_hier_fait est faux, termine en lui demandant de noter ses trois points positifs et ses trois points négatifs d’hier.
+N’invente aucune donnée personnelle : utilise uniquement celles fournies.`;
+  const user=`Voici les données du jour (JSON) :\n${JSON.stringify({...d,meteo:w},null,1)}\n\nRédige le briefing.`;
+  const tool=v=>({type:v,name:'web_search',max_uses:3,allowed_domains:b.domains.length?b.domains:undefined,user_location:{type:'approximate',country:'FR',timezone:'Europe/Paris'}});
+  let toolV='web_search_20250305',messages=[{role:'user',content:user}],j,searches=0;
+  for(let turn=0;turn<5;turn++){
+    try{j=await claudeCall({model:b.model,max_tokens:2500,system,messages,tools:[tool(toolV)]})}
+    catch(e){if(e.status===400&&/web_search|tool/i.test(e.raw)&&toolV==='web_search_20250305'){toolV='web_search_20260209';turn--;continue}throw e}
+    searches+=((j.usage||{}).server_tool_use||{}).web_search_requests||0;
+    if(j.stop_reason==='pause_turn'){messages=[...messages,{role:'assistant',content:j.content}];continue}
+    break;
+  }
+  const txt=j.content.filter(x=>x.type==='text').map(x=>x.text).join('');
+  const src=[];j.content.forEach(x=>(x.citations||[]).forEach(c=>{if(c.url&&!src.find(s=>s.url===c.url))src.push({url:c.url,title:c.title||c.url})}));
+  const paras=txt.split(/\n\s*\n/).map(p=>p.trim()).filter(Boolean).map(p=>{const m=p.match(/^\[([^\]]+)\]\s*/);return {label:m?m[1]:'',text:(m?p.slice(m[0].length):p).replace(/\*\*/g,'').replace(/\s+/g,' ').trim()}}).filter(p=>p.text);
+  return {paras,sources:src.slice(0,8),searches};
+}
+const BR={state:'idle',err:'',note:''};
+async function runBriefing(force){
+  const k=dkey(today());
+  if(!force&&S.briefings[k]){BR.state='ready';render();return}
+  BR.state='loading';BR.err='';BR.note='';render();
+  const d=briefingData();const w=await getWeather();
+  let res=null;
+  if(getKey()){try{res=await aiScript(d,w);res.ai=true}catch(e){BR.note=(e instanceof TypeError?'Pas de connexion à Claude':e.message)+' — voici la version simple.'}}
+  if(!res||!res.paras.length)res={paras:localScript(d,w),sources:[],ai:false};
+  if(!w)BR.note=(BR.note?BR.note+' ':'')+'Météo indisponible (pas de réseau ?).';
+  res.ts=Date.now();S.briefings[k]=res;Object.keys(S.briefings).sort().slice(0,-7).forEach(x=>delete S.briefings[x]);save();
+  BR.state='ready';render();speakFrom(0);
+}
+/* voix */
+const TTS={playing:false,paused:false,i:-1};
+const frVoices=()=>{try{return speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))}catch(e){return []}};
+const pickVoice=()=>{const vs=frVoices();return vs.find(v=>v.name===S.brief.voice)||vs.find(v=>/fr[-_]FR/i.test(v.lang)&&/premium|enhanced|amélioré/i.test(v.name))||vs.find(v=>/fr[-_]FR/i.test(v.lang))||vs[0]||null};
+function unlockTTS(){try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}}
+function hlPara(i){document.querySelectorAll('.bp').forEach((n,j)=>n.classList.toggle('cur',j===i));const n=document.querySelectorAll('.bp')[i];if(n&&n.scrollIntoView)n.scrollIntoView({block:'center',behavior:'smooth'})}
+function speakFrom(i){
+  const b=S.briefings[dkey(today())];if(!b||!('speechSynthesis' in window))return;
+  try{speechSynthesis.cancel()}catch(e){}
+  TTS.playing=true;TTS.paused=false;TTS.i=i;updCtl();
+  const step=()=>{if(!TTS.playing)return;if(TTS.i>=b.paras.length){TTS.playing=false;TTS.i=-1;hlPara(-1);updCtl();return}
+    hlPara(TTS.i);const chunks=b.paras[TTS.i].text.match(/[^.!?…]+[.!?…]*["»”]?\s*/g)||[b.paras[TTS.i].text];let c=0;
+    const say=()=>{if(!TTS.playing)return;if(c>=chunks.length){TTS.i++;step();return}const u=new SpeechSynthesisUtterance(chunks[c++].trim());u.lang='fr-FR';const v=pickVoice();if(v)u.voice=v;u.rate=+S.brief.rate||1;u.onend=say;u.onerror=say;speechSynthesis.speak(u)};say()};
+  step();
+}
+function stopTTS(){TTS.playing=false;TTS.paused=false;try{speechSynthesis.cancel()}catch(e){}hlPara(-1);updCtl()}
+function updCtl(){const p=document.getElementById('bplay');if(p)p.textContent=TTS.playing&&!TTS.paused?'⏸':'▶'}
+function vBriefing(){
+  const k=dkey(today()),b=S.briefings[k];
+  let h=`<button class="back" data-act="tab" data-t="journal">${ICON.left}Journal</button><header class="top"><div><h1>Briefing</h1><div class="sub">${cap(fmt(today(),{weekday:'long',day:'numeric',month:'long'}))}</div></div><button class="iconbtn" data-act="briefset" aria-label="Réglages du briefing">${ICON.gear}</button></header>`;
+  if(BR.state==='loading')return h+`<div class="card bload"><div class="spin"></div><b>Je prépare ton briefing…</b><small>${getKey()?'Météo, infos du jour, ton agenda et ton ciel':'Météo, ton agenda et ton ciel'}</small></div>`;
+  if(!b)return h+`<button class="bstart" data-act="brun">☀️<b>Lancer mon briefing</b><small>${getKey()?'Avec les infos du jour et l’interprétation de ton ciel':'Version simple : ajoute ta clé API dans les réglages du briefing pour les infos et l’interprétation'}</small></button>`;
+  if(BR.note)h+=`<p class="note bnote">${esc(BR.note)}</p>`;
+  h+=`<div class="bctl"><button id="bplay" data-act="bplay">${TTS.playing&&!TTS.paused?'⏸':'▶'}</button><button data-act="bstop">⏹</button><button data-act="breplay">↺ Relire</button><button data-act="bregen">⟳ Refaire</button></div>`;
+  h+='<div class="card">'+b.paras.map((p,i)=>`<div class="bp ${TTS.i===i?'cur':''}" data-act="bfrom" data-i="${i}">${p.label?`<span class="bl">${esc(p.label)}</span>`:''}<p>${esc(p.text)}</p></div>`).join('')+'</div>';
+  if(b.sources&&b.sources.length)h+=`<div class="card"><h3>Sources des infos</h3>${b.sources.map(s=>`<a class="bsrc" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}<small>${esc(s.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</small></a>`).join('')}</div>`;
+  const yk=dkey(addDays(today(),-1));
+  if(!reviewOf(yk))h+=`<button class="card prompt" data-act="review" data-date="${yk}"><span>✍️</span><span><b>Bilan d’hier</b><small>3 choses positives, 3 négatives</small></span>${ICON.right}</button>`;
+  h+=`<p class="note">${b.ai?'Rédigé par Claude':'Version simple, sans IA'} à ${new Date(b.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}. Touche un paragraphe pour le relire à partir de là.</p>`;
+  return h;
+}
+function briefSetSheet(){
+  const b=S.brief,key=getKey(),vs=frVoices();
+  sheet(`<h2>Réglages du briefing</h2>
+  <label class="f">Ton prénom</label><input type="text" id="bfName" value="${esc(b.name)}" placeholder="Pour te dire bonjour">
+  <label class="f">Ville pour la météo</label><input type="text" id="bfCity" value="${esc(b.city)}"><div class="grid2" style="margin-top:6px"><input type="text" inputmode="decimal" id="bfLat" value="${b.lat}" placeholder="Latitude"><input type="text" inputmode="decimal" id="bfLon" value="${b.lon}" placeholder="Longitude"></div>
+  <label class="f">Clé API Claude</label><input type="password" id="bfKey" value="" placeholder="${key?'Clé enregistrée (••••'+esc(key.slice(-4))+')':'sk-ant-…'}" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div class="row2" style="margin-top:8px"><button class="secondary" style="margin:0" data-act="bkeytest">Tester la clé</button>${key?'<button class="secondary" style="margin:0;color:var(--accent)" data-act="bkeydel">Effacer la clé</button>':''}</div><p class="note" id="bkeyRes">La clé reste uniquement sur ce téléphone et n’est jamais incluse dans les sauvegardes. Pour le briefing, tes tâches, RDV, budget et ton ciel du jour sont envoyés à Claude.</p>
+  <label class="f">Modèle</label><select id="bfModel"><option value="claude-haiku-5-5" ${b.model==='claude-haiku-5-5'?'selected':''}>Claude Haiku — rapide et économique</option><option value="claude-sonnet-5-5" ${b.model==='claude-sonnet-5-5'?'selected':''}>Claude Sonnet — plus fin, plus cher</option></select>
+  <label class="f">Longueur</label><select id="bfLen"><option value="court" ${b.length==='court'?'selected':''}>Court (≈ 2 min)</option><option value="normal" ${b.length!=='court'?'selected':''}>Normal (≈ 3-4 min)</option></select>
+  <label class="f">Sources des infos</label><div class="catpick" id="bfSrc">${SOURCES.map(([d,l])=>`<button type="button" class="chip ${b.domains.includes(d)?'on':''}" style="--cc:var(--ink)" data-act="bsrc" data-d="${d}">${l}</button>`).join('')}</div>
+  <label class="f">Thèmes prioritaires</label><input type="text" id="bfThemes" value="${esc(b.themes)}" placeholder="Ex : géopolitique, culture, sport">
+  <label class="f">Voix</label><select id="bfVoice"><option value="">Automatique</option>${vs.map(v=>`<option ${v.name===b.voice?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
+  <label class="f">Vitesse</label><select id="bfRate">${[[0.85,'Lente'],[1,'Normale'],[1.1,'Rapide'],[1.2,'Très rapide']].map(([v,l])=>`<option value="${v}" ${+b.rate===v?'selected':''}>${l}</option>`).join('')}</select>
+  <div class="row2"><button class="secondary" style="margin:0" data-act="bvoicetest">🔊 Tester la voix</button><button class="primary" style="margin:0" data-act="bsave">Enregistrer</button></div>
+  <p class="note">Astuce : dans Réglages iPhone › Accessibilité › Contenu énoncé › Voix › Français, tu peux télécharger une voix « améliorée » bien plus naturelle, puis la choisir ici.</p>`);
+}
+function readBriefForm(){const g=id=>(document.getElementById(id)||{}).value;const b=S.brief;b.name=(g('bfName')||'').trim();b.city=(g('bfCity')||'').trim()||b.city;const la=parseFloat((g('bfLat')||'').replace(',','.')),lo=parseFloat((g('bfLon')||'').replace(',','.'));if(isFinite(la))b.lat=la;if(isFinite(lo))b.lon=lo;b.model=g('bfModel')||b.model;b.length=g('bfLen')||b.length;b.themes=(g('bfThemes')||'').trim();b.voice=g('bfVoice')||'';b.rate=+g('bfRate')||1;b.domains=[...document.querySelectorAll('#bfSrc .chip.on')].map(c=>c.dataset.d);const nk=(g('bfKey')||'').trim();if(nk)setKey(nk)}
+
 /* ---------- render ---------- */
 const app=document.getElementById('app'),bar=document.getElementById('tabbar');
 const TABS=[['journal','Journal',ICON.journal],['planning','Planning',ICON.cal],['track','Suivi',ICON.mood],['money','Dépenses',ICON.money],['col','Collections',ICON.col]];
 function render(){
-  app.innerHTML=({journal:vJournal,planning:vPlanning,track:vTrack,money:vMoney,col:vCollections}[U.tab]||vJournal)();
+  app.innerHTML=({journal:vJournal,planning:vPlanning,track:vTrack,money:vMoney,col:vCollections,briefing:vBriefing}[U.tab]||vJournal)();
   bar.innerHTML=TABS.map(([k,l,i])=>`<button class="${U.tab===k?'on':''}" data-act="tab" data-t="${k}">${i}${l}</button>`).join('');
 }
 function commit(){save();render()}
@@ -1019,6 +1195,7 @@ function settingsSheet(){
   sheet(`<h2>Réglages</h2>
   <p class="note" style="margin-bottom:12px">Tes données restent uniquement sur ce téléphone. Fais une sauvegarde de temps en temps pour ne rien perdre.${storageOK?'':' <b>Attention : l’enregistrement ne fonctionne pas ici.</b>'}</p>
   <label class="f">Apparence</label><div class="seg" style="margin:0 0 10px">${[['auto','Auto'],['light','Clair'],['dark','Sombre']].map(([k,l])=>`<button class="${(S.theme||'auto')===k?'on':''}" data-act="theme" data-v="${k}">${l}</button>`).join('')}</div>
+  <button class="opt" data-act="briefset">☀️ Briefing du matin <span style="float:right;color:var(--muted)">${getKey()?'Clé ajoutée':'Sans clé'} ›</span></button>
   <button class="opt" data-act="notifs">🔔 Notifications <span style="float:right;color:var(--muted)">›</span></button>
   <button class="opt" data-act="pinmenu">🔒 Code de verrouillage <span style="float:right;color:var(--muted)">${S.pin?'Activé':'Désactivé'} ›</span></button>
   <button class="opt" data-act="opencol" data-c="natal">✦ Mon thème natal <span style="float:right;color:var(--muted)">›</span></button>
@@ -1045,7 +1222,7 @@ document.addEventListener('click',ev=>{
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,ds=el.dataset;
   switch(a){
-    case 'tab':U.tab=ds.t;try{sessionStorage.setItem('carnet.tab',ds.t)}catch(e){};render();window.scrollTo(0,0);break;
+    case 'tab':if(ds.t!=='briefing'&&TTS.playing)stopTTS();U.tab=ds.t;try{sessionStorage.setItem('carnet.tab',ds.t)}catch(e){};render();window.scrollTo(0,0);break;
     case 'jv':U.jv=ds.v;U.addType='task';U.openSub=null;render();break;
     case 'jnav':{U.openSub=null;const n=+ds.dir;U.cur=U.jv==='d'?addDays(U.cur,n):U.jv==='w'?addDays(U.cur,7*n):addMonths(U.cur,n);render();break}
     case 'gotoday':U.cur=today();render();break;
@@ -1081,6 +1258,19 @@ document.addEventListener('click',ev=>{
     case 'budget':budgetSheet();break;
     case 'nobudget':S.budget=null;closeSheet();commit();break;
     case 'settings':settingsSheet();break;
+    case 'gobrief':U.tab='briefing';render();window.scrollTo(0,0);break;
+    case 'brun':unlockTTS();runBriefing(false);break;
+    case 'bplay':{if(TTS.playing&&!TTS.paused){try{speechSynthesis.pause()}catch(e){}TTS.paused=true}else if(TTS.playing&&TTS.paused){try{speechSynthesis.resume()}catch(e){}TTS.paused=false}else speakFrom(0);updCtl();break}
+    case 'bstop':stopTTS();break;
+    case 'breplay':speakFrom(0);break;
+    case 'bregen':stopTTS();unlockTTS();runBriefing(true);break;
+    case 'bfrom':speakFrom(+ds.i);break;
+    case 'briefset':briefSetSheet();break;
+    case 'bsrc':el.classList.toggle('on');break;
+    case 'bkeytest':{readBriefForm();save();const out=document.getElementById('bkeyRes');if(!getKey()){out.textContent='Colle d’abord ta clé.';break}out.textContent='Test en cours…';claudeCall({model:S.brief.model,max_tokens:5,messages:[{role:'user',content:'Réponds juste OK.'}]}).then(()=>{out.innerHTML='<b style="color:#4F9A5C">✓ La clé fonctionne.</b>'}).catch(e=>{out.innerHTML='<b style="color:var(--accent)">'+esc(e instanceof TypeError?'Pas de connexion à Claude.':e.message)+'</b>'});break}
+    case 'bkeydel':setKey('');briefSetSheet();toast('Clé effacée');break;
+    case 'bsave':readBriefForm();save();closeSheet();render();toast('Réglages enregistrés ✓');break;
+    case 'bvoicetest':{readBriefForm();try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(`Bonjour${S.brief.name?' '+S.brief.name:''} ! Voici la voix de ton briefing du matin.`);u.lang='fr-FR';const v=pickVoice();if(v)u.voice=v;u.rate=+S.brief.rate||1;speechSynthesis.speak(u)}catch(e){toast('Voix indisponible')}break}
     case 'search':searchSheet();break;
     case 'openkey':{const k=ds.key,v=k.slice(2);closeSheet();U.tab='journal';if(k[0]==='d'){U.jv='d';U.cur=parseD(v)}else if(k[0]==='w'){U.jv='w';const [y,w]=v.split('-W').map(Number);U.cur=addDays(monday(new Date(y,0,4)),(w-1)*7)}else{U.jv='m';const [y,m]=v.split('-').map(Number);U.cur=new Date(y,m-1,1)}render();window.scrollTo(0,0);break}
     case 'opencol':closeSheet();U.tab='col';U.col=ds.c;render();window.scrollTo(0,0);break;
@@ -1149,9 +1339,9 @@ document.addEventListener('click',ev=>{
     case 'export':{try{const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const u=URL.createObjectURL(b);const l=document.createElement('a');l.href=u;l.download=`carnet-sauvegarde-${dkey(today())}.json`;document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}catch(e){toast('Téléchargement impossible ici, utilise « Copier »')}break}
     case 'copyexport':{const txt=JSON.stringify(S);(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Sauvegarde copiée ✓')).catch(()=>{const t=document.getElementById('importText');if(t){t.value=txt;t.select()}toast('Copie bloquée : sélectionne le texte')});break}
     case 'importpaste':stageImport((document.getElementById('importText')||{}).value||'');break;
-    case 'confirmimport':if(pendingImport){S=Object.assign(fresh(),pendingImport);ensureNotif();pendingImport=null;closeSheet();commit();toast('Données restaurées ✓')}break;
+    case 'confirmimport':if(pendingImport){S=Object.assign(fresh(),pendingImport);ensureNotif();ensureBrief();pendingImport=null;closeSheet();commit();toast('Données restaurées ✓')}break;
     case 'reset':document.getElementById('resetZone').innerHTML=`<p class="note">Tout sera supprimé de ce téléphone : journal, humeurs, habitudes et dépenses.</p><button class="primary" style="margin-top:8px" data-act="confirmreset">Oui, tout effacer</button>`;break;
-    case 'confirmreset':S=fresh();ensureNotif();closeSheet();commit();toast('Carnet remis à zéro');break;
+    case 'confirmreset':S=fresh();ensureNotif();ensureBrief();closeSheet();commit();toast('Carnet remis à zéro');break;
   }
 });
 document.addEventListener('change',ev=>{
@@ -1202,6 +1392,8 @@ let lastDay=dkey(today());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&dkey(today())!==lastDay){lastDay=dkey(today());U.cur=today();U.hm=som(today());U.em=som(today());U.my=today().getFullYear();applyRecurring();render()}});
 
 applyRecurring();
+if(location.hash==='#briefing')U.tab='briefing';
+window.addEventListener('hashchange',()=>{if(location.hash==='#briefing'){U.tab='briefing';render();window.scrollTo(0,0)}});
 render();
 if(S.pin)openPin('unlock');
 if('serviceWorker' in navigator){try{const had=!!navigator.serviceWorker.controller;let done=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!done){done=true;location.reload()}});navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}}

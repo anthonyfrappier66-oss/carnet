@@ -1,4 +1,4 @@
-const CACHE = 'carnet-v5';
+const CACHE = 'carnet-v6';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png', './astro.js', './astronomy.min.js', './natal.js'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting()));
@@ -10,6 +10,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // météo, Claude… : toujours en direct
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
   if (isPage) {
     // Page : d'abord le réseau (toujours la dernière version), sinon la copie hors ligne.
