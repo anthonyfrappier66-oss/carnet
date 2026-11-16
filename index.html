@@ -973,7 +973,7 @@ function vNatal(){
 function natSheet(){const n=S.natal||{};sheet(`<h2>Naissance</h2><form data-form="natal"><label class="f">Date</label><input type="date" name="date" value="${esc(n.date||'')}"><label class="f">Heure (heure de France)</label><input type="time" name="time" value="${esc(n.time||'')}"><label class="f">Lieu</label><input type="text" name="place" value="${esc(n.place||'')}"><div class="grid2"><div><label class="f">Latitude</label><input type="text" inputmode="decimal" name="lat" value="${n.lat??''}"></div><div><label class="f">Longitude</label><input type="text" inputmode="decimal" name="lon" value="${n.lon??''}"></div></div><p class="note">Coordonnées en degrés décimaux (est positif). Exemple, Paris : 48.857 / 2.352.</p><div class="row2"><button type="submit" class="primary">Enregistrer</button></div></form>`)}
 
 /* ---------- briefing du matin ---------- */
-const BRIEF_DEF={name:'',city:'Bordeaux',lat:44.84,lon:-0.58,model:'claude-haiku-5-5',domains:['lemonde.fr','francetvinfo.fr','france24.com','rfi.fr','legrandcontinent.eu','euractiv.fr','euractiv.com','touteleurope.eu','balkaninsight.com','courrierdeuropecentrale.fr','fashionnetwork.com','vogue.fr','elle.fr'],srcv:2,themes:'géopolitique, diplomatie, défense, Europe',voice:'',rate:1,length:'long'};
+const BRIEF_DEF={name:'',city:'Bordeaux',lat:44.84,lon:-0.58,model:'claude-haiku-5-5',domains:['lemonde.fr','francetvinfo.fr','france24.com','rfi.fr','legrandcontinent.eu','euractiv.fr','euractiv.com','touteleurope.eu','balkaninsight.com','courrierdeuropecentrale.fr','fashionnetwork.com','vogue.fr','elle.fr'],srcv:2,themes:'géopolitique, diplomatie, défense, Europe',voice:'',rate:1,length:'long',azRegion:'francecentral',azVoice:'fr-FR-VivienneMultilingualNeural'};
 const SOURCES=[['lemonde.fr','Le Monde'],['francetvinfo.fr','franceinfo'],['france24.com','France 24'],['rfi.fr','RFI'],['legrandcontinent.eu','Le Grand Continent'],['courrierinternational.com','Courrier international'],['lefigaro.fr','Le Figaro'],['liberation.fr','Libération'],['lesechos.fr','Les Échos'],['euractiv.fr','Euractiv (FR)'],['euractiv.com','Euractiv (EN)'],['touteleurope.eu','Toute l’Europe'],['balkaninsight.com','Balkan Insight'],['courrierdeuropecentrale.fr','Courrier d’Europe centrale'],['fashionnetwork.com','FashionNetwork'],['vogue.fr','Vogue France'],['elle.fr','Elle'],['20minutes.fr','20 Minutes']];
 function ensureBrief(){const had=!!S.brief;S.brief=Object.assign(JSON.parse(JSON.stringify(BRIEF_DEF)),S.brief||{});if(had&&(S.brief.srcv||1)<2){['euractiv.fr','euractiv.com','touteleurope.eu','balkaninsight.com','courrierdeuropecentrale.fr','fashionnetwork.com','vogue.fr','elle.fr'].forEach(d=>{if(!S.brief.domains.includes(d))S.brief.domains.push(d)});S.brief.srcv=2}S.briefings=S.briefings||{}}
 ensureBrief();
@@ -1078,18 +1078,19 @@ async function runBriefing(force){
 const TTS={playing:false,paused:false,i:-1};
 const frVoices=()=>{try{return speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))}catch(e){return []}};
 const pickVoice=()=>{const vs=frVoices();return vs.find(v=>v.name===S.brief.voice)||vs.find(v=>/fr[-_]FR/i.test(v.lang)&&/premium|enhanced|amélioré/i.test(v.name))||vs.find(v=>/fr[-_]FR/i.test(v.lang))||vs[0]||null};
-function unlockTTS(){try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}}
+function unlockTTS(){unlockAudio();try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}}
 function hlPara(i){document.querySelectorAll('.bp').forEach((n,j)=>n.classList.toggle('cur',j===i));const n=document.querySelectorAll('.bp')[i];if(n&&n.scrollIntoView)n.scrollIntoView({block:'center',behavior:'smooth'})}
-function speakFrom(i){
+function speakFrom(i){stopTTS(true);if(getAz())azSpeakFrom(i);else speakBrowserFrom(i)}
+function speakBrowserFrom(i){
   const b=S.briefings[dkey(today())];if(!b||!('speechSynthesis' in window))return;
   try{speechSynthesis.cancel()}catch(e){}
-  TTS.playing=true;TTS.paused=false;TTS.i=i;updCtl();
+  TTS.az=false;TTS.playing=true;TTS.paused=false;TTS.i=i;updCtl();
   const step=()=>{if(!TTS.playing)return;if(TTS.i>=b.paras.length){TTS.playing=false;TTS.i=-1;hlPara(-1);updCtl();return}
     hlPara(TTS.i);const chunks=b.paras[TTS.i].text.match(/[^.!?…]+[.!?…]*["»”]?\s*/g)||[b.paras[TTS.i].text];let c=0;
     const say=()=>{if(!TTS.playing)return;if(c>=chunks.length){TTS.i++;step();return}const u=new SpeechSynthesisUtterance(chunks[c++].trim());u.lang='fr-FR';const v=pickVoice();if(v)u.voice=v;u.rate=+S.brief.rate||1;u.onend=say;u.onerror=say;speechSynthesis.speak(u)};say()};
   step();
 }
-function stopTTS(){TTS.playing=false;TTS.paused=false;try{speechSynthesis.cancel()}catch(e){}hlPara(-1);updCtl()}
+function stopTTS(keep){azRun++;TTS.playing=false;TTS.paused=false;try{AUD.pause();if(AUD.onended){const f=AUD.onended;AUD.onended=null;f()}}catch(e){}try{speechSynthesis.cancel()}catch(e){}if(!keep){hlPara(-1);updCtl()}}
 function updCtl(){const p=document.getElementById('bplay');if(p)p.textContent=TTS.playing&&!TTS.paused?'⏸':'▶'}
 function vBriefing(){
   const k=dkey(today()),b=S.briefings[k];
@@ -1116,12 +1117,49 @@ function briefSetSheet(){
   <label class="f">Longueur</label><select id="bfLen"><option value="court" ${b.length==='court'?'selected':''}>Court (≈ 2 min)</option><option value="normal" ${b.length==='normal'?'selected':''}>Normal (≈ 3-4 min)</option><option value="long" ${b.length==='long'?'selected':''}>Long (≈ 6-7 min)</option></select>
   <label class="f">Sources des infos</label><div class="catpick" id="bfSrc">${SOURCES.map(([d,l])=>`<button type="button" class="chip ${b.domains.includes(d)?'on':''}" style="--cc:var(--ink)" data-act="bsrc" data-d="${d}">${l}</button>`).join('')}</div>
   <label class="f">Thèmes prioritaires</label><input type="text" id="bfThemes" value="${esc(b.themes)}" placeholder="Ex : géopolitique, culture, sport">
-  <label class="f">Voix</label><select id="bfVoice"><option value="">Automatique</option>${vs.map(v=>`<option ${v.name===b.voice?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
+  <label class="f">Voix naturelle (Azure)</label><input type="password" id="bfAz" value="" placeholder="${getAz()?'Clé enregistrée (••••'+esc(getAz().slice(-4))+')':'Clé Azure Speech'}" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div class="grid2" style="margin-top:6px"><select id="bfAzR">${AZR.map(([k,l])=>`<option value="${k}" ${S.brief.azRegion===k?'selected':''}>${l}</option>`).join('')}</select><select id="bfAzV">${AZV.map(([k,l])=>`<option value="${k}" ${S.brief.azVoice===k?'selected':''}>${l.split(' — ')[0]}</option>`).join('')}</select></div>
+  ${getAz()?`<button class="subplus" style="color:var(--accent)" data-act="bazdel">Effacer la clé Azure</button>`:''}<p class="note">Avec une clé Azure, le briefing est lu par une voix neurale très naturelle (gratuit jusqu’à 500 000 caractères par mois). Ce mois-ci : ${((S.azChars||{})[ym(today())]||0).toLocaleString('fr-FR')} caractères. Sans réseau ou sans clé, c’est la voix de l’iPhone.</p>
+  <label class="f">Voix de l’iPhone (secours)</label><select id="bfVoice"><option value="">Automatique</option>${vs.map(v=>`<option ${v.name===b.voice?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
   <label class="f">Vitesse</label><select id="bfRate">${[[0.85,'Lente'],[1,'Normale'],[1.1,'Rapide'],[1.2,'Très rapide']].map(([v,l])=>`<option value="${v}" ${+b.rate===v?'selected':''}>${l}</option>`).join('')}</select>
   <div class="row2"><button class="secondary" style="margin:0" data-act="bvoicetest">🔊 Tester la voix</button><button class="primary" style="margin:0" data-act="bsave">Enregistrer</button></div>
   <p class="note">Astuce : dans Réglages iPhone › Accessibilité › Contenu énoncé › Voix › Français, tu peux télécharger une voix « améliorée » bien plus naturelle, puis la choisir ici.</p>`);
 }
-function readBriefForm(){const g=id=>(document.getElementById(id)||{}).value;const b=S.brief;b.name=(g('bfName')||'').trim();b.city=(g('bfCity')||'').trim()||b.city;const la=parseFloat((g('bfLat')||'').replace(',','.')),lo=parseFloat((g('bfLon')||'').replace(',','.'));if(isFinite(la))b.lat=la;if(isFinite(lo))b.lon=lo;b.model=g('bfModel')||b.model;b.length=g('bfLen')||b.length;b.themes=(g('bfThemes')||'').trim();b.voice=g('bfVoice')||'';b.rate=+g('bfRate')||1;b.domains=[...document.querySelectorAll('#bfSrc .chip.on')].map(c=>c.dataset.d);const nk=(g('bfKey')||'').trim();if(nk)setKey(nk)}
+function readBriefForm(){const g=id=>(document.getElementById(id)||{}).value;const b=S.brief;b.name=(g('bfName')||'').trim();b.city=(g('bfCity')||'').trim()||b.city;const la=parseFloat((g('bfLat')||'').replace(',','.')),lo=parseFloat((g('bfLon')||'').replace(',','.'));if(isFinite(la))b.lat=la;if(isFinite(lo))b.lon=lo;b.model=g('bfModel')||b.model;b.length=g('bfLen')||b.length;b.themes=(g('bfThemes')||'').trim();b.voice=g('bfVoice')||'';b.rate=+g('bfRate')||1;b.domains=[...document.querySelectorAll('#bfSrc .chip.on')].map(c=>c.dataset.d);const nk=(g('bfKey')||'').trim();if(nk)setKey(nk);const az=(g('bfAz')||'').trim();if(az)setAz(az);if(g('bfAzR'))b.azRegion=g('bfAzR');if(g('bfAzV'))b.azVoice=g('bfAzV')}
+
+/* ---------- voix naturelle (Azure) ---------- */
+const AZV=[['fr-FR-VivienneMultilingualNeural','Vivienne — femme, très naturelle'],['fr-FR-RemyMultilingualNeural','Rémy — homme, très naturel'],['fr-FR-DeniseNeural','Denise — femme'],['fr-FR-HenriNeural','Henri — homme'],['fr-FR-YvesNeural','Yves — homme'],['fr-FR-JosephineNeural','Joséphine — femme'],['fr-FR-ClaudeNeural','Claude — homme'],['fr-FR-CoralieNeural','Coralie — femme']];
+const AZR=[['francecentral','France Central'],['westeurope','West Europe'],['northeurope','North Europe'],['switzerlandnorth','Switzerland North'],['uksouth','UK South'],['eastus','East US']];
+const AZK='carnet.azkey';
+const getAz=()=>{try{return localStorage.getItem(AZK)||''}catch(e){return ''}};
+const setAz=v=>{try{v?localStorage.setItem(AZK,v):localStorage.removeItem(AZK)}catch(e){}};
+if(!S.brief.azRegion)S.brief.azRegion='francecentral';if(!S.brief.azVoice)S.brief.azVoice='fr-FR-VivienneMultilingualNeural';
+const xmlEsc=s=>s.replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]));
+async function azSynth(text){
+  const b=S.brief,pct=Math.round(((+b.rate||1)-1)*100);
+  const ssml=`<speak version='1.0' xml:lang='fr-FR'><voice name='${b.azVoice}'><prosody rate='${pct>=0?'+':''}${pct}%'>${xmlEsc(text)}</prosody></voice></speak>`;
+  const r=await fetch(`https://${b.azRegion}.tts.speech.microsoft.com/cognitiveservices/v1`,{method:'POST',headers:{'Ocp-Apim-Subscription-Key':getAz(),'Content-Type':'application/ssml+xml','X-Microsoft-OutputFormat':'audio-24khz-48kbitrate-mono-mp3'},body:ssml});
+  if(!r.ok){const e=new Error(r.status===401||r.status===403?'Clé Azure invalide ou mauvaise région.':r.status===429?'Limite gratuite Azure atteinte pour le moment.':'Erreur Azure '+r.status+'.');e.status=r.status;throw e}
+  S.azChars=S.azChars||{};const m=ym(today());S.azChars[m]=(S.azChars[m]||0)+text.length;save();
+  return URL.createObjectURL(await r.blob());
+}
+const AUD=new Audio();AUD.preload='auto';const AZC={};let SIL=null,azRun=0;
+function silentWav(){const sr=8000,n=800,buf=new ArrayBuffer(44+n*2),v=new DataView(buf),w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}))}
+function unlockAudio(){try{SIL=SIL||silentWav();AUD.src=SIL;const p=AUD.play();if(p&&p.catch)p.catch(()=>{})}catch(e){}}
+function azUrl(b,i){const k=b.ts+'|'+i+'|'+S.brief.azVoice+'|'+S.brief.rate;return AZC[k]=AZC[k]||azSynth(b.paras[i].text).catch(e=>{delete AZC[k];throw e})}
+async function azSpeakFrom(i){
+  const b=S.briefings[dkey(today())];if(!b)return;const run=++azRun;
+  TTS.az=true;TTS.playing=true;TTS.paused=false;TTS.i=i;updCtl();
+  while(TTS.playing&&run===azRun&&TTS.i<b.paras.length){
+    hlPara(TTS.i);let url;
+    try{url=await azUrl(b,TTS.i)}catch(e){if(run!==azRun)return;toast(e.message);TTS.az=false;return speakBrowserFrom(TTS.i)}
+    if(TTS.i+1<b.paras.length)azUrl(b,TTS.i+1).catch(()=>{});
+    if(run!==azRun||!TTS.playing)return;
+    await new Promise(res=>{AUD.onended=res;AUD.onerror=res;AUD.src=url;const p=AUD.play();if(p&&p.catch)p.catch(res)});
+    if(run!==azRun)return;TTS.i++;
+  }
+  if(run===azRun){TTS.playing=false;TTS.i=-1;hlPara(-1);updCtl()}
+}
 
 /* ---------- render ---------- */
 const app=document.getElementById('app'),bar=document.getElementById('tabbar');
@@ -1261,17 +1299,18 @@ document.addEventListener('click',ev=>{
     case 'settings':settingsSheet();break;
     case 'gobrief':U.tab='briefing';render();window.scrollTo(0,0);break;
     case 'brun':unlockTTS();runBriefing(false);break;
-    case 'bplay':{if(TTS.playing&&!TTS.paused){try{speechSynthesis.pause()}catch(e){}TTS.paused=true}else if(TTS.playing&&TTS.paused){try{speechSynthesis.resume()}catch(e){}TTS.paused=false}else speakFrom(0);updCtl();break}
+    case 'bplay':{if(TTS.playing&&!TTS.paused){try{TTS.az?AUD.pause():speechSynthesis.pause()}catch(e){}TTS.paused=true}else if(TTS.playing&&TTS.paused){try{TTS.az?AUD.play():speechSynthesis.resume()}catch(e){}TTS.paused=false}else{unlockTTS();speakFrom(0)}updCtl();break}
     case 'bstop':stopTTS();break;
-    case 'breplay':speakFrom(0);break;
+    case 'breplay':unlockTTS();speakFrom(0);break;
     case 'bregen':stopTTS();unlockTTS();runBriefing(true);break;
-    case 'bfrom':speakFrom(+ds.i);break;
+    case 'bfrom':unlockTTS();speakFrom(+ds.i);break;
     case 'briefset':briefSetSheet();break;
     case 'bsrc':el.classList.toggle('on');break;
     case 'bkeytest':{readBriefForm();save();const out=document.getElementById('bkeyRes');if(!getKey()){out.textContent='Colle d’abord ta clé.';break}out.textContent='Test en cours…';claudeCall({model:S.brief.model,max_tokens:5,messages:[{role:'user',content:'Réponds juste OK.'}]}).then(()=>{out.innerHTML='<b style="color:#4F9A5C">✓ La clé fonctionne.</b>'}).catch(e=>{out.innerHTML='<b style="color:var(--accent)">'+esc(e instanceof TypeError?'Pas de connexion à Claude.':e.message)+'</b>'});break}
     case 'bkeydel':setKey('');briefSetSheet();toast('Clé effacée');break;
     case 'bsave':readBriefForm();save();closeSheet();render();toast('Réglages enregistrés ✓');break;
-    case 'bvoicetest':{readBriefForm();try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(`Bonjour${S.brief.name?' '+S.brief.name:''} ! Voici la voix de ton briefing du matin.`);u.lang='fr-FR';const v=pickVoice();if(v)u.voice=v;u.rate=+S.brief.rate||1;speechSynthesis.speak(u)}catch(e){toast('Voix indisponible')}break}
+    case 'bazdel':setAz('');briefSetSheet();toast('Clé Azure effacée');break;
+    case 'bvoicetest':{readBriefForm();if(getAz()){unlockAudio();stopTTS(true);const txt=`Bonjour${S.brief.name?' '+S.brief.name:''} ! Voici la voix de ton briefing du matin.`;azSynth(txt).then(u=>{AUD.onended=null;AUD.src=u;AUD.play().catch(()=>{})}).catch(e=>toast(e.message));break}try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(`Bonjour${S.brief.name?' '+S.brief.name:''} ! Voici la voix de ton briefing du matin.`);u.lang='fr-FR';const v=pickVoice();if(v)u.voice=v;u.rate=+S.brief.rate||1;speechSynthesis.speak(u)}catch(e){toast('Voix indisponible')}break}
     case 'search':searchSheet();break;
     case 'openkey':{const k=ds.key,v=k.slice(2);closeSheet();U.tab='journal';if(k[0]==='d'){U.jv='d';U.cur=parseD(v)}else if(k[0]==='w'){U.jv='w';const [y,w]=v.split('-W').map(Number);U.cur=addDays(monday(new Date(y,0,4)),(w-1)*7)}else{U.jv='m';const [y,m]=v.split('-').map(Number);U.cur=new Date(y,m-1,1)}render();window.scrollTo(0,0);break}
     case 'opencol':closeSheet();U.tab='col';U.col=ds.c;render();window.scrollTo(0,0);break;
