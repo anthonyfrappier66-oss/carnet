@@ -338,6 +338,7 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .bload{display:flex;flex-direction:column;align-items:center;gap:8px;padding:34px 16px;text-align:center}
 .bload b{font-family:var(--serif);font-size:19px;font-weight:600}
 .bload small{color:var(--muted)}
+.bload .bcancel{appearance:none;margin-top:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:9px 16px;font-size:14px}
 .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:sp 0.9s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .bctl{display:flex;gap:8px;margin:0 -16px 12px;padding:8px 16px;position:sticky;top:env(safe-area-inset-top);z-index:5;background:var(--paper)}
@@ -1030,15 +1031,16 @@ function localScript(d,w){
   if(d.budget.reste!=null)add('Budget',d.budget.reste>=0?`Il te reste ${eur(d.budget.reste)} à dépenser ce mois-ci.`:`Attention, tu as dépassé ton budget du mois de ${eur(-d.budget.reste)}.`);
   if(d.anniversaires_aujourdhui.length)add('Anniversaires',`Aujourd’hui : ${d.anniversaires_aujourdhui.join(', ')}.`);
   if(d.anniversaires_demain.length)add('Anniversaires',`Demain : ${d.anniversaires_demain.join(', ')}.`);
-  if(d.ciel_du_jour.length||d.transits_sur_son_theme.length)add('Ciel du jour',[d.ciel_du_jour.join('. '),d.transits_sur_son_theme.length?'Sur ton thème : '+d.transits_sur_son_theme.map(x=>x.replace(/ \(orbe.*\)/,'').replace('son ','ton ').replace('sa ','ta ')).join(', ')+'.':''].filter(Boolean).join(' '));
+  if(d.ciel_du_jour.length||d.transits_sur_son_theme.length)add('Ciel du jour',[d.ciel_du_jour.length?d.ciel_du_jour.join('. ').replace(/\.?$/,'.'):'',d.transits_sur_son_theme.length?'Sur ton thème : '+d.transits_sur_son_theme.map(x=>typeof x==='string'?x.replace(/ \(orbe.*\)/,'').replace('son ','ton ').replace('sa ','ta '):`${String(x.transit||'').replace(/,.*$/,'')} en ${x.aspect||'aspect'} avec ton ${x.point_natal||''}`.replace(/\s+/g,' ').trim()).join(', ')+'.':''].filter(Boolean).join(' '));
   if(d.recap_semaine_prochaine&&d.recap_semaine_prochaine.length)add('Semaine prochaine',`La semaine prochaine : ${d.recap_semaine_prochaine.join(' ; ')}.`);
   if(d.affirmation)add('Affirmation',d.affirmation);
   if(!d.bilan_hier_fait)add('Bilan',`Pour finir, prends une minute pour le bilan d’hier : trois choses positives, trois choses négatives.`);
   return P;
 }
 function apiErr(j,st){const m=(j&&j.error&&j.error.message)||'';if(st===401)return 'Clé API invalide ou expirée.';if(/credit balance/i.test(m))return 'Plus de crédit sur ton compte API : recharge-le dans la console Claude.';if(st===429)return 'Trop de demandes d’un coup, réessaie dans une minute.';if(st===529||st===503)return 'Le service est surchargé, réessaie dans un instant.';return m||('Erreur '+st)}
-async function claudeCall(body){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':getKey(),'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
+async function claudeCall(body,outer){
+  const ctrl=new AbortController(),tm=setTimeout(()=>ctrl.abort('timeout'),150000),onA=()=>ctrl.abort('cancel');if(outer){if(outer.aborted)ctrl.abort('cancel');else outer.addEventListener('abort',onA)}
+  let r;try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ctrl.signal,method:'POST',headers:{'x-api-key':getKey(),'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)})}catch(e){if(ctrl.signal.aborted){const er=new Error(ctrl.signal.reason==='cancel'?'Briefing IA arrêté':'Claude ne répond pas (plus de 2 min 30)');er.aborted=true;throw er}throw e}finally{clearTimeout(tm);if(outer)outer.removeEventListener('abort',onA)}
   let j=null;try{j=await r.json()}catch(e){}
   if(!r.ok){const e=new Error(apiErr(j,r.status));e.status=r.status;e.raw=(j&&j.error&&j.error.message)||'';throw e}
   return j;
@@ -1060,8 +1062,10 @@ N’invente aucune donnée personnelle : utilise uniquement celles fournies.`;
   const tools=()=>[tool(toolV),...(useFetch?[{type:'web_fetch_20250910',name:'web_fetch',max_uses:4,blocked_domains:blocked.length?blocked:undefined,max_content_tokens:6000}]:[])];
   const parts=[];let stop='';
   for(let turn=0;turn<8;turn++){
-    try{j=await claudeCall({model:b.model,max_tokens:b.length==='long'?9000:6000,system,messages,tools:tools()})}
-    catch(e){if(e.status===400&&/not accessible to our user agent/i.test(e.raw)){const m=e.raw.match(/\[([^\]]*)\]/);const ds=m?(m[1].match(/[a-z0-9.-]+\.[a-z]{2,}/gi)||[]):[];const nw=ds.filter(d=>!blocked.includes(d));if(nw.length&&turn<4){blocked.push(...nw);turn--;continue}}if(e.status===400&&useFetch&&/fetch|beta/i.test(e.raw)){useFetch=false;turn--;continue}if(e.status===400&&/web_search|tool/i.test(e.raw)&&toolV==='web_search_20250305'){toolV='web_search_20260209';turn--;continue}throw e}
+    if(BR.ctrl&&BR.ctrl.signal.aborted)break;
+    BR.step=turn===0?'Recherche des infos du jour…':`Recherche et rédaction (étape ${turn+1})…`;updLoad();
+    try{j=await claudeCall({model:b.model,max_tokens:b.length==='long'?9000:6000,system,messages,tools:tools()},BR.ctrl&&BR.ctrl.signal)}
+    catch(e){if(e.aborted&&parts.some(x=>x.type==='text'&&x.text.trim()))break;if(e.status===400&&/not accessible to our user agent/i.test(e.raw)){const m=e.raw.match(/\[([^\]]*)\]/);const ds=m?(m[1].match(/[a-z0-9.-]+\.[a-z]{2,}/gi)||[]):[];const nw=ds.filter(d=>!blocked.includes(d));if(nw.length&&turn<4){blocked.push(...nw);turn--;continue}}if(e.status===400&&useFetch&&/fetch|beta/i.test(e.raw)){useFetch=false;turn--;continue}if(e.status===400&&/web_search|tool/i.test(e.raw)&&toolV==='web_search_20250305'){toolV='web_search_20260209';turn--;continue}throw e}
     searches+=((j.usage||{}).server_tool_use||{}).web_search_requests||0;
     parts.push(...j.content);stop=j.stop_reason;
     if(j.stop_reason==='pause_turn'||j.stop_reason==='max_tokens'){
@@ -1083,15 +1087,27 @@ const BR={state:'idle',err:'',note:''};
 async function runBriefing(force,autoplay=true){
   const k=dkey(today());
   if(!force&&S.briefings[k]){BR.state='ready';render();return}
-  BR.state='loading';BR.err='';BR.note='';render();
-  const d=briefingData();const w=await getWeather();
-  let res=null;
-  if(getKey()){try{res=await aiScript(d,w);res.ai=true}catch(e){BR.note=(e instanceof TypeError?'Pas de connexion à Claude':e.message)+' — voici la version simple.'}}
-  if(!res||!res.paras.length)res={paras:localScript(d,w),sources:[],ai:false};
-  if(!w)BR.note=(BR.note?BR.note+' ':'')+'Météo indisponible (pas de réseau ?).';
-  res.ts=Date.now();S.briefings[k]=res;Object.keys(S.briefings).sort().slice(0,-7).forEach(x=>delete S.briefings[x]);save();
+  if(BR.state==='loading')return;
+  BR.state='loading';BR.err='';BR.note='';BR.step='Météo et agenda…';BR.t0=Date.now();BR.ctrl=new AbortController();render();
+  clearInterval(BR.tick);BR.tick=setInterval(updLoad,1000);
+  // garde-fou global : 6 minutes max, puis version simple
+  const guard=setTimeout(()=>{try{BR.ctrl.abort()}catch(e){}},360000);
+  let res=null,d=null,w=null;
+  try{
+    try{d=briefingData()}catch(e){BR.note='Erreur dans tes données ('+(e.message||e)+').';d=null}
+    w=await getWeather();
+    if(d&&getKey()){try{res=await aiScript(d,w);res.ai=true}catch(e){BR.note=(e instanceof TypeError?'Pas de connexion à Claude':e.message)+' — voici la version simple.'}}
+    if((!res||!res.paras.length)&&d){try{res={paras:localScript(d,w),sources:[],ai:false}}catch(e){BR.note+=' ('+(e.message||e)+')'}}
+    if(!res||!res.paras.length)res={paras:[{label:'Bonjour',text:'Bonjour ! Je n’ai pas pu préparer ton briefing aujourd’hui. Envoie une capture de ce message à Claude pour qu’il corrige.'}],sources:[],ai:false};
+    if(!w)BR.note=(BR.note?BR.note+' ':'')+'Météo indisponible (pas de réseau ?).';
+    res.ts=Date.now();S.briefings[k]=res;Object.keys(S.briefings).sort().slice(0,-7).forEach(x=>delete S.briefings[x]);save();
+  }catch(e){
+    BR.note='Erreur : '+(e.message||e);
+    if(!S.briefings[k])S.briefings[k]={paras:[{label:'Bonjour',text:'Le briefing a rencontré une erreur. Touche Refaire pour réessayer.'}],sources:[],ai:false,ts:Date.now()};
+  }finally{clearTimeout(guard);clearInterval(BR.tick);BR.ctrl=null}
   BR.state='ready';if(!autoplay)BR.waitTap=true;render();if(autoplay)speakFrom(0);
 }
+function updLoad(){const a=document.getElementById('bstep'),t=document.getElementById('btime');if(a)a.textContent=BR.step||'';if(t&&BR.t0){const s=Math.round((Date.now()-BR.t0)/1000);t.textContent=s<60?s+' s':Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')}}
 /* voix */
 const TTS={playing:false,paused:false,i:-1};
 const frVoices=()=>{try{return speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))}catch(e){return []}};
@@ -1113,7 +1129,7 @@ function updCtl(){const p=document.getElementById('bplay');if(p)p.textContent=TT
 function vBriefing(){
   const k=dkey(today()),b=S.briefings[k];
   let h=`<button class="back" data-act="tab" data-t="journal">${ICON.left}Journal</button><header class="top"><div><h1>Briefing</h1><div class="sub">${cap(fmt(today(),{weekday:'long',day:'numeric',month:'long'}))}</div></div><button class="iconbtn" data-act="briefset" aria-label="Réglages du briefing">${ICON.gear}</button></header>`;
-  if(BR.state==='loading')return h+`<div class="card bload"><div class="spin"></div><b>Je prépare ton briefing…</b><small>${getKey()?'Météo, infos du jour, ton agenda et ton ciel':'Météo, ton agenda et ton ciel'}</small></div>`;
+  if(BR.state==='loading')return h+`<div class="card bload"><div class="spin"></div><b>Je prépare ton briefing…</b><small id="bstep">${esc(BR.step||'')}</small><small style="opacity:.7"><span id="btime">0 s</span> · ça prend en général 1 à 3 minutes</small><button class="bcancel" data-act="bcancel">Arrêter et faire la version simple</button></div>`;
   if(!b)return h+`<button class="bstart" data-act="brun">☀️<b>Lancer mon briefing</b><small>${getKey()?'Avec les infos du jour et l’interprétation de ton ciel':'Version simple : ajoute ta clé API dans les réglages du briefing pour les infos et l’interprétation'}</small></button>`;
   if(BR.note)h+=`<p class="note bnote">${esc(BR.note)}</p>`;
   if(BR.waitTap&&!TTS.playing)h+=`<button class="bstart" style="padding:22px 20px;font-size:34px" data-act="btap">▶<b>Écouter mon briefing</b><small>Ton briefing est prêt, touche pour le lancer</small></button>`;
@@ -1393,6 +1409,7 @@ document.addEventListener('click',ev=>{
     case 'nobudget':S.budget=null;closeSheet();commit();break;
     case 'settings':settingsSheet();break;
     case 'gobrief':U.tab='briefing';render();window.scrollTo(0,0);break;
+    case 'bcancel':if(BR.ctrl)BR.ctrl.abort();break;
     case 'brun':unlockTTS();runBriefing(false);break;
     case 'btap':BR.waitTap=false;unlockTTS();speakFrom(0);render();break;
     case 'bplay':{if(TTS.playing&&!TTS.paused){try{TTS.az?AUD.pause():speechSynthesis.pause()}catch(e){}TTS.paused=true}else if(TTS.playing&&TTS.paused){try{TTS.az?AUD.play():speechSynthesis.resume()}catch(e){}TTS.paused=false}else{unlockTTS();speakFrom(0)}updCtl();break}
