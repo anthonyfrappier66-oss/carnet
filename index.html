@@ -1094,7 +1094,8 @@ async function runBriefing(force,autoplay=true){
   const guard=setTimeout(()=>{try{BR.ctrl.abort()}catch(e){}},360000);
   let res=null,d=null,w=null;
   try{
-    try{d=briefingData()}catch(e){BR.note='Erreur dans tes données ('+(e.message||e)+').';d=null}
+    try{d=briefingData()}catch(e){BR.note='Erreur dans tes données ('+(e.message||e)+').';const t=today();d={date:cap(fmt(t,{weekday:'long',day:'numeric',month:'long',year:'numeric'})),prenom:S.brief.name||null,taches_du_jour:[],rdv_du_jour:[],a_faire_cette_semaine_pas_encore_fait:[],prochains_jours:[],rappel_traitement:null,budget:{},anniversaires_aujourdhui:[],anniversaires_demain:[],ciel_du_jour:[],lune_du_jour:null,transits_sur_son_theme:[],theme_natal:null,systeme_de_maisons:null,bilan_hier_fait:true,affirmation:null}}
+    if(!getKey())BR.note=(BR.note?BR.note+' ':'')+'Pas de clé API Claude sur ce téléphone : ajoute-la dans les réglages du briefing (⚙︎) pour avoir les infos et l’astro.';
     w=await getWeather();
     if(d&&getKey()){try{res=await aiScript(d,w);res.ai=true}catch(e){BR.note=(e instanceof TypeError?'Pas de connexion à Claude':e.message)+' — voici la version simple.'}}
     if((!res||!res.paras.length)&&d){try{res={paras:localScript(d,w),sources:[],ai:false}}catch(e){BR.note+=' ('+(e.message||e)+')'}}
