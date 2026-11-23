@@ -1064,16 +1064,16 @@ N’invente aucune donnée personnelle : utilise uniquement celles fournies.`;
   for(let turn=0;turn<8;turn++){
     if(BR.ctrl&&BR.ctrl.signal.aborted)break;
     BR.step=turn===0?'Recherche des infos du jour…':`Recherche et rédaction (étape ${turn+1})…`;updLoad();
-    try{j=await claudeCall({model:b.model,max_tokens:b.length==='long'?9000:6000,system,messages,tools:tools()},BR.ctrl&&BR.ctrl.signal)}
+    try{j=await claudeCall({model:b.model,max_tokens:b.length==='long'?16000:10000,system,messages,tools:tools()},BR.ctrl&&BR.ctrl.signal)}
     catch(e){if(e.aborted&&parts.some(x=>x.type==='text'&&x.text.trim()))break;if(e.status===400&&/not accessible to our user agent/i.test(e.raw)){const m=e.raw.match(/\[([^\]]*)\]/);const ds=m?(m[1].match(/[a-z0-9.-]+\.[a-z]{2,}/gi)||[]):[];const nw=ds.filter(d=>!blocked.includes(d));if(nw.length&&turn<4){blocked.push(...nw);turn--;continue}}if(e.status===400&&useFetch&&/fetch|beta/i.test(e.raw)){useFetch=false;turn--;continue}if(e.status===400&&/web_search|tool/i.test(e.raw)&&toolV==='web_search_20250305'){toolV='web_search_20260209';turn--;continue}throw e}
     searches+=((j.usage||{}).server_tool_use||{}).web_search_requests||0;
     parts.push(...j.content);stop=j.stop_reason;
     if(j.stop_reason==='pause_turn'||j.stop_reason==='max_tokens'){
-      // on renvoie tout ce qui a déjà été écrit pour que Claude continue exactement là où il s'est arrêté
-      const prev=messages[messages.length-1],add=j.content.filter(x=>x.type!=='thinking'&&x.type!=='redacted_thinking');
-      let content=prev.role==='assistant'?[...prev.content,...add]:add;
-      const last=content[content.length-1];if(last&&last.type==='text'){content=[...content.slice(0,-1),{...last,text:last.text.replace(/\s+$/,'')}]}
-      if(prev.role==='assistant')prev.content=content;else messages=[...messages,{role:'assistant',content}];
+      // ce modèle refuse qu'on finisse par un message de l'assistant : on renvoie ce qui a été écrit, puis on lui demande de continuer
+      const add=j.content.filter(x=>x.type!=='thinking'&&x.type!=='redacted_thinking');
+      if(!add.length)break;
+      const last=add[add.length-1];if(last.type==='text')add[add.length-1]={...last,text:last.text.replace(/\s+$/,'')||'…'};
+      messages=[...messages,{role:'assistant',content:add},{role:'user',content:j.stop_reason==='max_tokens'?'Tu as été coupé. Continue exactement là où tu t’es arrêté, même au milieu d’une phrase, sans rien répéter ni ajouter d’introduction, et toujours avec le format [Titre] par paragraphe.':'Continue.'}];
       continue}
     break;
   }
